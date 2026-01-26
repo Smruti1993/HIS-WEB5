@@ -1,12 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// --- CONFIGURATION START ---
-// Paste your Supabase credentials here if you want to hardcode them.
-// If these are empty, the app will look for credentials in LocalStorage (set via the Connection page).
-const HARDCODED_URL = 'https://svfmxmesdgazkivvqeiy.supabase.co'; 
-const HARDCODED_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2Zm14bWVzZGdhemtpdnZxZWl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk0MjAxMTksImV4cCI6MjA4NDk5NjExOX0.tygzE17-hKn1DEj4kLhVtmsei2KXuMGocnBpEiKZeX4';
-// --- CONFIGURATION END ---
-
 const STORAGE_KEY_URL = 'medicore_sb_url';
 const STORAGE_KEY_KEY = 'medicore_sb_key';
 
