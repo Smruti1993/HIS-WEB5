@@ -1,0 +1,5 @@
+{
+  "name": "MediCore HMS",
+  "description": "A comprehensive healthcare management system featuring patient registration, doctor scheduling, master data management, and AI-assisted appointment triage.",
+  "requestFramePermissions": []
+}
