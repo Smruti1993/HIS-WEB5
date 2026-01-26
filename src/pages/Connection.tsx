@@ -17,7 +17,7 @@ export const Connection = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if(url && key) {
-        updateDbConnection(url, key);
+        updateDbConnection(url.trim(), key.trim());
     }
   };
 
