@@ -1,27 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { Database, Save, AlertCircle, CheckCircle, LogOut, Loader2 } from 'lucide-react';
-import { getStoredCredentials } from '../services/supabaseClient';
+import { Database, Save, AlertCircle, CheckCircle, LogOut, Loader2, Lock } from 'lucide-react';
+import { getStoredCredentials, saveCredentialsToStorage, clearCredentialsFromStorage } from '../services/supabaseClient';
 import { useData } from '../context/DataContext';
 
 export const Connection = () => {
   const { isDbConnected, updateDbConnection, disconnectDb, isLoading } = useData();
   const [url, setUrl] = useState('');
   const [key, setKey] = useState('');
+  const [isHardcoded, setIsHardcoded] = useState(false);
   
   useEffect(() => {
     const creds = getStoredCredentials();
     setUrl(creds.url);
     setKey(creds.key);
+    
+    // Check if these match the hardcoded values (heuristic)
+    // In a real app we might expose a specific flag from the service, but this is sufficient for dev
+    const isUsingLocalStorage = localStorage.getItem('medicore_sb_url');
+    if (!isUsingLocalStorage && creds.url) {
+        setIsHardcoded(true);
+    }
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if(url && key) {
+    if(url && key && !isHardcoded) {
         updateDbConnection(url.trim(), key.trim());
     }
   };
 
   const handleDisconnect = () => {
+      if (isHardcoded) return;
       disconnectDb();
       setUrl('');
       setKey('');
@@ -50,13 +59,21 @@ export const Connection = () => {
                 </div>
             </div>
 
+            {isHardcoded && (
+                <div className="p-4 rounded-lg mb-6 bg-blue-50 text-blue-800 flex items-center gap-3 border border-blue-100">
+                    <Lock className="w-4 h-4" />
+                    <span className="text-sm font-medium">Using credentials hardcoded in <code>supabaseClient.ts</code>. Editing here is disabled.</span>
+                </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
                     <label className="form-label">Project URL</label>
                     <input 
                         required 
+                        disabled={isHardcoded}
                         type="url" 
-                        className="form-input font-mono text-sm" 
+                        className={`form-input font-mono text-sm ${isHardcoded ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
                         placeholder="https://your-project.supabase.co"
                         value={url}
                         onChange={e => setUrl(e.target.value)}
@@ -67,46 +84,42 @@ export const Connection = () => {
                     <label className="form-label">Anon Key (Public)</label>
                     <input 
                         required 
+                        disabled={isHardcoded}
                         type="password" 
-                        className="form-input font-mono text-sm" 
+                        className={`form-input font-mono text-sm ${isHardcoded ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
                         placeholder="eyJh..."
                         value={key}
                         onChange={e => setKey(e.target.value)}
                     />
-                    <p className="text-xs text-slate-400 mt-1">Found in Project Settings &gt; API</p>
+                    {!isHardcoded && <p className="text-xs text-slate-400 mt-1">Found in Project Settings &gt; API</p>}
                 </div>
 
                 <div className="pt-4 flex gap-3">
-                    <button 
-                        type="submit" 
-                        disabled={isLoading}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-all shadow-sm shadow-blue-200 disabled:bg-blue-400"
-                    >
-                        {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                        {isDbConnected ? 'Update Connection' : 'Connect Database'}
-                    </button>
-                    
-                    {isDbConnected && (
-                        <button 
-                            type="button" 
-                            onClick={handleDisconnect}
-                            className="bg-white border border-red-200 text-red-600 hover:bg-red-50 px-6 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-all"
-                        >
-                            <LogOut className="w-4 h-4" />
-                            Disconnect
-                        </button>
+                    {!isHardcoded && (
+                        <>
+                            <button 
+                                type="submit" 
+                                disabled={isLoading}
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-all shadow-sm shadow-blue-200 disabled:bg-blue-400"
+                            >
+                                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                {isDbConnected ? 'Update Connection' : 'Connect Database'}
+                            </button>
+                            
+                            {isDbConnected && (
+                                <button 
+                                    type="button" 
+                                    onClick={handleDisconnect}
+                                    className="bg-white border border-red-200 text-red-600 hover:bg-red-50 px-6 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-all"
+                                >
+                                    <LogOut className="w-4 h-4" />
+                                    Disconnect
+                                </button>
+                            )}
+                        </>
                     )}
                 </div>
             </form>
-        </div>
-
-        <div className="bg-slate-100 p-6 rounded-xl text-sm text-slate-600 space-y-2">
-            <h4 className="font-semibold text-slate-800">How to get credentials?</h4>
-            <ol className="list-decimal pl-5 space-y-1">
-                <li>Create a project at <a href="https://supabase.com" target="_blank" className="text-blue-600 hover:underline">supabase.com</a></li>
-                <li>Go to <strong>Project Settings</strong> (gear icon) &gt; <strong>API</strong>.</li>
-                <li>Copy the <strong>Project URL</strong> and <strong>anon / public</strong> key.</li>
-            </ol>
         </div>
     </div>
   );

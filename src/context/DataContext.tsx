@@ -242,7 +242,18 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       showToast('info', 'Disconnected from database.');
   };
 
+  // Helper to ensure DB is connected before actions
+  const requireDb = (): boolean => {
+      if (!checkConfigured()) {
+          showToast('error', 'Database not connected. Please go to the "Connection" page.');
+          return false;
+      }
+      return true;
+  };
+
   const addPatient = async (p: Patient) => {
+    if (!requireDb()) return;
+
     setPatients(prev => [...prev, p]);
     const { error } = await getSupabase().from('patients').insert(mapPatientToDb(p));
     if (error) {
@@ -256,6 +267,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const updatePatient = async (id: string, data: Partial<Patient>) => {
+    if (!requireDb()) return;
+
     const original = patients.find(p => p.id === id);
     setPatients(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
     
@@ -279,6 +292,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const addEmployee = async (e: Employee) => {
+    if (!requireDb()) return;
+
     setEmployees(prev => [...prev, e]);
     const { error } = await getSupabase().from('employees').insert(mapEmpToDb(e));
     if (error) {
@@ -291,6 +306,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const updateEmployee = async (id: string, data: Partial<Employee>) => {
+    if (!requireDb()) return;
+
     const original = employees.find(e => e.id === id);
     setEmployees(prev => prev.map(emp => emp.id === id ? { ...emp, ...data } : emp));
     
@@ -315,6 +332,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const addDepartment = async (d: Department) => {
+    if (!requireDb()) return;
+
     setDepartments(prev => [...prev, d]);
     const { error } = await getSupabase().from('departments').insert(d);
     if(error) {
@@ -325,6 +344,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const addUnit = async (u: Unit) => {
+    if (!requireDb()) return;
+
     setUnits(prev => [...prev, u]);
     const { error } = await getSupabase().from('units').insert(u);
     if(error) {
@@ -335,6 +356,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const addServiceCentre = async (s: ServiceCentre) => {
+    if (!requireDb()) return;
+
     setServiceCentres(prev => [...prev, s]);
     const { error } = await getSupabase().from('service_centres').insert(s);
     if(error) {
@@ -345,6 +368,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const saveAvailability = async (avail: DoctorAvailability) => {
+    if (!requireDb()) return;
+
     // Optimistic: Remove old, add new
     let previousSchedule: DoctorAvailability | undefined;
     setAvailabilities(prev => {
@@ -367,6 +392,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const deleteAvailability = async (id: string) => {
+    if (!requireDb()) return;
+
     const original = availabilities.find(a => a.id === id);
     setAvailabilities(prev => prev.filter(a => a.id !== id));
     const { error } = await getSupabase().from('doctor_availability').delete().eq('id', id);
@@ -377,6 +404,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const bookAppointment = async (apt: Appointment) => {
+    if (!requireDb()) return;
+
     setAppointments(prev => [...prev, apt]);
     const { error } = await getSupabase().from('appointments').insert(mapAptToDb(apt));
     if (error) {
@@ -389,6 +418,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const cancelAppointment = async (id: string) => {
+    if (!requireDb()) return;
+
     const original = appointments.find(a => a.id === id);
     if (!original) return;
 

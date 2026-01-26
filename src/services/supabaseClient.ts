@@ -1,12 +1,27 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
+// --- CONFIGURATION START ---
+// Paste your Supabase credentials here if you want to hardcode them.
+// If these are empty, the app will look for credentials in LocalStorage (set via the Connection page).
+const HARDCODED_URL = ''; 
+const HARDCODED_KEY = '';
+// --- CONFIGURATION END ---
+
 const STORAGE_KEY_URL = 'medicore_sb_url';
 const STORAGE_KEY_KEY = 'medicore_sb_key';
 
-export const getStoredCredentials = () => ({
-  url: localStorage.getItem(STORAGE_KEY_URL) || '',
-  key: localStorage.getItem(STORAGE_KEY_KEY) || ''
-});
+export const getStoredCredentials = () => {
+  // 1. Priority: Hardcoded credentials in this file
+  if (HARDCODED_URL && HARDCODED_KEY) {
+    return { url: HARDCODED_URL, key: HARDCODED_KEY };
+  }
+
+  // 2. Fallback: LocalStorage credentials (set via UI)
+  return {
+    url: localStorage.getItem(STORAGE_KEY_URL) || '',
+    key: localStorage.getItem(STORAGE_KEY_KEY) || ''
+  };
+};
 
 const isValidUrl = (u: string) => {
     try { return !!new URL(u); } catch { return false; }
@@ -29,6 +44,7 @@ export const getSupabase = () => {
         client = createClient(url, key);
     } else {
         // Fallback client that allows the app to load but will fail requests
+        // This prevents the app from crashing immediately on load
         client = createClient('https://setup-required.supabase.co', 'placeholder');
     }
     return client;

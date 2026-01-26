@@ -1,7 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const STORAGE_KEY_URL = 'https://svfmxmesdgazkivvqeiy.supabase.co';
-const STORAGE_KEY_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2Zm14bWVzZGdhemtpdnZxZWl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk0MjAxMTksImV4cCI6MjA4NDk5NjExOX0.tygzE17-hKn1DEj4kLhVtmsei2KXuMGocnBpEiKZeX4';
+const STORAGE_KEY_URL = 'medicore_sb_url';
+const STORAGE_KEY_KEY = 'medicore_sb_key';
 
 export const getStoredCredentials = () => ({
   url: localStorage.getItem(STORAGE_KEY_URL) || '',
