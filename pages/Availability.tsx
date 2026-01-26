@@ -1,29 +1,55 @@
 import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
 import { DAYS_OF_WEEK } from '../constants';
-import { Clock, Check } from 'lucide-react';
+import { Clock, Check, Pencil, X } from 'lucide-react';
+import { DoctorAvailability } from '../types';
 
 export const Availability = () => {
-  const { employees, availabilities, saveAvailability } = useData();
+  const { employees, availabilities, saveAvailability, deleteAvailability } = useData();
   const doctors = employees.filter(e => e.role === 'Doctor');
   
   const [selectedDoctor, setSelectedDoctor] = useState('');
-  const [formData, setFormData] = useState({
+  const [editingId, setEditingId] = useState<string | null>(null);
+  
+  const initialFormState = {
     dayOfWeek: 1, // Monday
     startTime: '09:00',
     endTime: '17:00',
     slotDurationMinutes: 30
-  });
+  };
+
+  const [formData, setFormData] = useState(initialFormState);
+
+  const handleEdit = (avail: DoctorAvailability) => {
+    setFormData({
+      dayOfWeek: avail.dayOfWeek,
+      startTime: avail.startTime,
+      endTime: avail.endTime,
+      slotDurationMinutes: avail.slotDurationMinutes
+    });
+    setEditingId(avail.id);
+  };
+
+  const handleCancelEdit = () => {
+    setFormData(initialFormState);
+    setEditingId(null);
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDoctor) return;
 
+    if (editingId) {
+      deleteAvailability(editingId);
+    }
+
     saveAvailability({
-        id: Date.now().toString(),
+        id: editingId || Date.now().toString(),
         doctorId: selectedDoctor,
         ...formData
     });
+
+    handleCancelEdit();
   };
 
   const getDoctorAvailability = (docId: string) => {
@@ -36,7 +62,7 @@ export const Availability = () => {
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-fit">
         <h2 className="text-xl font-bold text-slate-800 mb-6 flex items-center">
             <Clock className="w-5 h-5 mr-2 text-blue-600" /> 
-            Manage Schedule
+            {editingId ? 'Edit Schedule' : 'Manage Schedule'}
         </h2>
         
         <form onSubmit={handleSave} className="space-y-5">
@@ -45,6 +71,7 @@ export const Availability = () => {
                 <select 
                     className="form-input"
                     value={selectedDoctor}
+                    disabled={!!editingId} // Disable doctor selection while editing
                     onChange={e => setSelectedDoctor(e.target.value)}
                 >
                     <option value="">-- Choose Doctor --</option>
@@ -52,6 +79,7 @@ export const Availability = () => {
                         <option key={d.id} value={d.id}>Dr. {d.firstName} {d.lastName} ({d.specialization})</option>
                     ))}
                 </select>
+                {editingId && <p className="text-xs text-slate-500 mt-1 italic">Cannot change doctor while editing</p>}
             </div>
 
             <div className={`transition-opacity duration-300 ${!selectedDoctor ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
@@ -91,9 +119,23 @@ export const Availability = () => {
                     </select>
                 </div>
 
-                <button type="submit" className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 transition-colors">
-                    Save Schedule
-                </button>
+                <div className="flex gap-2">
+                    {editingId && (
+                        <button 
+                            type="button" 
+                            onClick={handleCancelEdit}
+                            className="flex-1 bg-slate-200 text-slate-700 py-2.5 rounded-lg font-medium hover:bg-slate-300 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                    )}
+                    <button 
+                        type="submit" 
+                        className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 transition-colors flex justify-center items-center"
+                    >
+                        {editingId ? 'Update Schedule' : 'Save Schedule'}
+                    </button>
+                </div>
             </div>
         </form>
       </div>
@@ -111,9 +153,13 @@ export const Availability = () => {
                         <div className="text-center py-10 text-slate-400">No schedule defined yet.</div>
                     ) : (
                         getDoctorAvailability(selectedDoctor).map(av => (
-                            <div key={av.id} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
+                            <div 
+                                key={av.id} 
+                                onClick={() => handleEdit(av)}
+                                className={`group flex items-center justify-between p-4 border rounded-xl shadow-sm transition-all cursor-pointer hover:border-blue-400 hover:shadow-md ${editingId === av.id ? 'border-blue-500 bg-blue-50/50 ring-1 ring-blue-200' : 'border-slate-200 bg-white'}`}
+                            >
                                 <div className="flex items-center">
-                                    <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold mr-4">
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold mr-4 transition-colors ${editingId === av.id ? 'bg-blue-100 text-blue-700' : 'bg-blue-50 text-blue-600'}`}>
                                         {DAYS_OF_WEEK[av.dayOfWeek].substring(0,3)}
                                     </div>
                                     <div>
@@ -121,9 +167,14 @@ export const Availability = () => {
                                         <p className="text-sm text-slate-500">{av.slotDurationMinutes} min slots</p>
                                     </div>
                                 </div>
-                                <div className="px-4 py-1.5 bg-green-50 text-green-700 rounded-full text-sm font-medium border border-green-100 flex items-center">
-                                    <Clock className="w-3.5 h-3.5 mr-1.5" />
-                                    {av.startTime} - {av.endTime}
+                                <div className="flex items-center gap-3">
+                                    <div className="px-4 py-1.5 bg-green-50 text-green-700 rounded-full text-sm font-medium border border-green-100 flex items-center">
+                                        <Clock className="w-3.5 h-3.5 mr-1.5" />
+                                        {av.startTime} - {av.endTime}
+                                    </div>
+                                    <div className={`text-slate-300 group-hover:text-blue-500 transition-colors ${editingId === av.id ? 'text-blue-500' : ''}`}>
+                                        <Pencil className="w-4 h-4" />
+                                    </div>
                                 </div>
                             </div>
                         ))

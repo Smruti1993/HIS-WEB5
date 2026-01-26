@@ -8,6 +8,7 @@ import { Patients } from './pages/Patients';
 import { Employees } from './pages/Employees';
 import { Availability } from './pages/Availability';
 import { Masters } from './pages/Masters';
+import { Connection } from './pages/Connection';
 
 const App = () => {
   return (
@@ -21,6 +22,7 @@ const App = () => {
             <Route path="employees" element={<Employees />} />
             <Route path="availability" element={<Availability />} />
             <Route path="masters" element={<Masters />} />
+            <Route path="connection" element={<Connection />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
