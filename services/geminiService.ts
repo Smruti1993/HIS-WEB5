@@ -1,6 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 
 const getAiClient = () => {
+  // Use process.env.API_KEY as required by the library guidelines.
+  // We assume this variable is injected and available in the environment.
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
     console.warn("Gemini API Key is missing. AI features will not work.");
@@ -11,7 +13,7 @@ const getAiClient = () => {
 
 export const analyzeSymptoms = async (symptoms: string, departments: string[]) => {
   const ai = getAiClient();
-  if (!ai) return { departmentName: null, urgency: 'Unknown', reasoning: 'API Key missing.' };
+  if (!ai) return { departmentName: null, urgency: 'Unknown', reasoning: 'API Key missing or invalid.' };
 
   const deptList = departments.join(', ');
 
