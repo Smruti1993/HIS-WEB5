@@ -218,7 +218,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const showToast = (type: 'success' | 'error' | 'info', message: string) => {
     const id = Date.now().toString();
     setToasts(prev => [...prev, { id, type, message }]);
-    setTimeout(() => removeToast(id), 3000);
+    setTimeout(() => removeToast(id), 5000); // Increased duration for error reading
   };
 
   const removeToast = (id: string) => {
@@ -246,14 +246,17 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setPatients(prev => [...prev, p]);
     const { error } = await getSupabase().from('patients').insert(mapPatientToDb(p));
     if (error) {
-      console.error(error);
-      showToast('error', 'Failed to save patient to DB');
+      console.error("Supabase Error:", error);
+      showToast('error', `DB Error: ${error.message}`);
+      // Rollback
+      setPatients(prev => prev.filter(pat => pat.id !== p.id));
     } else {
       showToast('success', `Patient ${p.firstName} registered.`);
     }
   };
 
   const updatePatient = async (id: string, data: Partial<Patient>) => {
+    const original = patients.find(p => p.id === id);
     setPatients(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
     
     const dbData: any = {};
@@ -267,8 +270,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
     const { error } = await getSupabase().from('patients').update(dbData).eq('id', id);
     if (error) {
-      console.error(error);
-      showToast('error', 'Failed to update patient details.');
+      console.error("Supabase Error:", error);
+      showToast('error', `Update failed: ${error.message}`);
+      if (original) setPatients(prev => prev.map(p => p.id === id ? original : p));
     } else {
       showToast('success', 'Patient updated successfully.');
     }
@@ -278,14 +282,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setEmployees(prev => [...prev, e]);
     const { error } = await getSupabase().from('employees').insert(mapEmpToDb(e));
     if (error) {
-       console.error(error);
-       showToast('error', 'Failed to save employee.');
+       console.error("Supabase Error:", error);
+       showToast('error', `Failed to save: ${error.message}`);
+       setEmployees(prev => prev.filter(emp => emp.id !== e.id));
     } else {
        showToast('success', `${e.role} added.`);
     }
   };
 
   const updateEmployee = async (id: string, data: Partial<Employee>) => {
+    const original = employees.find(e => e.id === id);
     setEmployees(prev => prev.map(emp => emp.id === id ? { ...emp, ...data } : emp));
     
     const dbData: any = {};
@@ -299,8 +305,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const fullNewData = { ...updatedEmp, ...data };
         const { error } = await getSupabase().from('employees').update(mapEmpToDb(fullNewData)).eq('id', id);
         if (error) {
-            console.error(error);
-            showToast('error', 'Failed to update employee in DB.');
+            console.error("Supabase Error:", error);
+            showToast('error', `Update failed: ${error.message}`);
+            if (original) setEmployees(prev => prev.map(emp => emp.id === id ? original : emp));
         } else {
             showToast('success', 'Employee updated.');
         }
@@ -310,39 +317,63 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const addDepartment = async (d: Department) => {
     setDepartments(prev => [...prev, d]);
     const { error } = await getSupabase().from('departments').insert(d);
-    if(error) showToast('error', error.message);
+    if(error) {
+        showToast('error', error.message);
+        setDepartments(prev => prev.filter(dept => dept.id !== d.id));
+    }
     else showToast('success', 'Department added.');
   };
 
   const addUnit = async (u: Unit) => {
     setUnits(prev => [...prev, u]);
     const { error } = await getSupabase().from('units').insert(u);
-    if(error) showToast('error', error.message);
+    if(error) {
+        showToast('error', error.message);
+        setUnits(prev => prev.filter(unit => unit.id !== u.id));
+    }
     else showToast('success', 'Unit added.');
   };
 
   const addServiceCentre = async (s: ServiceCentre) => {
     setServiceCentres(prev => [...prev, s]);
     const { error } = await getSupabase().from('service_centres').insert(s);
-    if(error) showToast('error', error.message);
+    if(error) {
+        showToast('error', error.message);
+        setServiceCentres(prev => prev.filter(sc => sc.id !== s.id));
+    }
     else showToast('success', 'Service Centre added.');
   };
 
   const saveAvailability = async (avail: DoctorAvailability) => {
+    // Optimistic: Remove old, add new
+    let previousSchedule: DoctorAvailability | undefined;
     setAvailabilities(prev => {
+      previousSchedule = prev.find(a => a.doctorId === avail.doctorId && a.dayOfWeek === avail.dayOfWeek);
       const filtered = prev.filter(a => !(a.doctorId === avail.doctorId && a.dayOfWeek === avail.dayOfWeek));
       return [...filtered, avail];
     });
 
     const { error } = await getSupabase().from('doctor_availability').insert(mapAvailToDb(avail));
-    if(error) showToast('error', 'Failed to save schedule.');
+    if(error) {
+        showToast('error', `Failed to save schedule: ${error.message}`);
+        // Rollback
+        setAvailabilities(prev => {
+            const filtered = prev.filter(a => a.id !== avail.id);
+            if (previousSchedule) return [...filtered, previousSchedule];
+            return filtered;
+        });
+    }
     else showToast('success', 'Schedule updated.');
   };
 
   const deleteAvailability = async (id: string) => {
+    const original = availabilities.find(a => a.id === id);
     setAvailabilities(prev => prev.filter(a => a.id !== id));
     const { error } = await getSupabase().from('doctor_availability').delete().eq('id', id);
-    if (error) showToast('error', 'Failed to delete schedule from DB.');
+    if (error) {
+        showToast('error', 'Failed to delete schedule.');
+        if (original) setAvailabilities(prev => [...prev, original]);
+    }
   };
 
   const bookAppointment = async (apt: Appointment) => {
@@ -350,7 +381,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { error } = await getSupabase().from('appointments').insert(mapAptToDb(apt));
     if (error) {
         console.error(error);
-        showToast('error', 'Failed to book appointment.');
+        showToast('error', `Failed to book: ${error.message}`);
+        setAppointments(prev => prev.filter(a => a.id !== apt.id));
     } else {
         showToast('success', 'Appointment booked successfully!');
     }
