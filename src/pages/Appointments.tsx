@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import { analyzeSymptoms } from '../services/geminiService';
 import { DatePicker } from '../components/DatePicker';
-import { Sparkles, Loader2, Calendar, Clock, AlertCircle, Filter, RefreshCw, XCircle, AlertTriangle, Printer, Pencil } from 'lucide-react';
+import { Sparkles, Loader2, Calendar, Clock, AlertCircle, Filter, RefreshCw, XCircle, AlertTriangle, Printer, Pencil, CheckCircle, Stethoscope } from 'lucide-react';
 import { Appointment } from '../types';
 
 export const Appointments = () => {
@@ -33,6 +33,10 @@ export const Appointments = () => {
   // --- Modal State ---
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [appointmentToCancel, setAppointmentToCancel] = useState<string | null>(null);
+
+  const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
+  const [appointmentToComplete, setAppointmentToComplete] = useState<Appointment | null>(null);
+  const [clinicalNotes, setClinicalNotes] = useState('');
 
   // --- Handlers ---
   const handleAiTriage = async () => {
@@ -292,6 +296,30 @@ export const Appointments = () => {
   const closeCancelModal = () => {
     setIsCancelModalOpen(false);
     setAppointmentToCancel(null);
+  };
+
+  const handleCompleteClick = (apt: Appointment) => {
+    setAppointmentToComplete(apt);
+    setClinicalNotes(apt.notes || '');
+    setIsCompleteModalOpen(true);
+  };
+
+  const confirmComplete = () => {
+    if (appointmentToComplete) {
+      updateAppointment(appointmentToComplete.id, {
+        status: 'Completed',
+        notes: clinicalNotes
+      });
+      setIsCompleteModalOpen(false);
+      setAppointmentToComplete(null);
+      setClinicalNotes('');
+    }
+  };
+
+  const closeCompleteModal = () => {
+    setIsCompleteModalOpen(false);
+    setAppointmentToComplete(null);
+    setClinicalNotes('');
   };
 
   const resetFilters = () => {
@@ -612,6 +640,13 @@ export const Appointments = () => {
                                             {apt.status === 'Scheduled' && (
                                                 <>
                                                   <button 
+                                                      onClick={() => handleCompleteClick(apt)}
+                                                      className="text-slate-400 hover:text-green-600 hover:bg-green-50 p-1.5 rounded-lg transition-colors"
+                                                      title="Complete Consultation"
+                                                  >
+                                                      <CheckCircle className="w-4 h-4" />
+                                                  </button>
+                                                  <button 
                                                       onClick={() => handleEditClick(apt)}
                                                       className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-1.5 rounded-lg transition-colors"
                                                       title="Edit Appointment"
@@ -678,6 +713,52 @@ export const Appointments = () => {
                           className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-lg shadow-red-200 transition-colors"
                       >
                           Yes, Cancel Appointment
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Complete Confirmation Modal */}
+      {isCompleteModalOpen && appointmentToComplete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+              <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 m-4 scale-100 animate-in zoom-in-95 duration-200 border border-slate-200">
+                  <div className="flex items-center gap-4 mb-6">
+                      <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                          <Stethoscope className="w-6 h-6 text-green-600" />
+                      </div>
+                      <div>
+                          <h3 className="text-lg font-bold text-slate-900">Complete Consultation</h3>
+                          <p className="text-sm text-slate-500">
+                             Patient: {patients.find(p => p.id === appointmentToComplete.patientId)?.firstName} {patients.find(p => p.id === appointmentToComplete.patientId)?.lastName}
+                          </p>
+                      </div>
+                  </div>
+                  
+                  <div className="mb-6">
+                      <label className="form-label">Clinical Notes / Diagnosis / Treatment</label>
+                      <textarea 
+                          className="form-input h-40 resize-none font-mono text-sm"
+                          placeholder="Enter detailed clinical notes, diagnosis, and prescribed treatment..."
+                          value={clinicalNotes}
+                          onChange={e => setClinicalNotes(e.target.value)}
+                      ></textarea>
+                      <p className="text-xs text-slate-400 mt-2">These notes will appear on the printed patient summary.</p>
+                  </div>
+                  
+                  <div className="flex justify-end gap-3">
+                      <button 
+                          onClick={closeCompleteModal}
+                          className="px-4 py-2 text-slate-600 hover:bg-slate-100 font-medium rounded-lg transition-colors"
+                      >
+                          Cancel
+                      </button>
+                      <button 
+                          onClick={confirmComplete}
+                          className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-lg shadow-green-200 transition-colors flex items-center gap-2"
+                      >
+                          <CheckCircle className="w-4 h-4" />
+                          Complete Visit
                       </button>
                   </div>
               </div>
