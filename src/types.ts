@@ -63,6 +63,36 @@ export interface Appointment {
   notes?: string;
 }
 
+// --- Billing Types ---
+
+export interface BillItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+export interface Payment {
+  id: string;
+  date: string;
+  amount: number;
+  method: 'Cash' | 'Card' | 'Insurance' | 'Online';
+  reference?: string;
+}
+
+export interface Bill {
+  id: string;
+  patientId: string;
+  appointmentId?: string; // Optional link to an appointment
+  date: string;
+  status: 'Unpaid' | 'Partial' | 'Paid';
+  totalAmount: number;
+  paidAmount: number;
+  items: BillItem[];
+  payments: Payment[];
+}
+
 export interface ToastMessage {
   id: string;
   type: 'success' | 'error' | 'info';

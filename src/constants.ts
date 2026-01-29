@@ -1,4 +1,4 @@
-import { Home, Users, Calendar, Settings, Clock, Activity, Database } from 'lucide-react';
+import { Home, Users, Calendar, Settings, Clock, Activity, Database, CreditCard } from 'lucide-react';
 
 export const APP_NAME = "MediCore HMS";
 
@@ -10,6 +10,7 @@ export const NAV_ITEMS = [
   { label: 'Dashboard', path: '/', icon: Home },
   { label: 'Appointments', path: '/appointments', icon: Calendar },
   { label: 'Patients', path: '/patients', icon: Users },
+  { label: 'Billing', path: '/billing', icon: CreditCard },
   { label: 'Doctors & Staff', path: '/employees', icon: Activity },
   { label: 'Availability', path: '/availability', icon: Clock },
   { label: 'Masters', path: '/masters', icon: Settings },

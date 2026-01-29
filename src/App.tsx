@@ -9,6 +9,7 @@ import { Employees } from './pages/Employees';
 import { Availability } from './pages/Availability';
 import { Masters } from './pages/Masters';
 import { Connection } from './pages/Connection';
+import { Billing } from './pages/Billing';
 
 const App = () => {
   return (
@@ -19,6 +20,7 @@ const App = () => {
             <Route index element={<Dashboard />} />
             <Route path="appointments" element={<Appointments />} />
             <Route path="patients" element={<Patients />} />
+            <Route path="billing" element={<Billing />} />
             <Route path="employees" element={<Employees />} />
             <Route path="availability" element={<Availability />} />
             <Route path="masters" element={<Masters />} />
