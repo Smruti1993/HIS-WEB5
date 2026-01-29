@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import { analyzeSymptoms } from '../services/geminiService';
-import { Sparkles, Loader2, Calendar, Clock, AlertCircle, Filter, RefreshCw, XCircle, AlertTriangle } from 'lucide-react';
+import { DatePicker } from '../components/DatePicker';
+import { Sparkles, Loader2, Calendar, Clock, AlertCircle, Filter, RefreshCw, XCircle, AlertTriangle, Printer, Pencil } from 'lucide-react';
+import { Appointment } from '../types';
 
 export const Appointments = () => {
   const { 
     departments, employees, availabilities, appointments, 
-    bookAppointment, cancelAppointment, patients 
+    bookAppointment, updateAppointment, cancelAppointment, patients 
   } = useData();
 
-  // --- Booking State ---
+  // --- Booking/Edit State ---
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [symptoms, setSymptoms] = useState('');
   const [aiAnalysis, setAiAnalysis] = useState<{departmentName: string, urgency: string, reasoning: string} | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -45,6 +48,133 @@ export const Appointments = () => {
     }
   };
 
+  const handlePrintSummary = (apt: Appointment) => {
+    const patient = patients.find(p => p.id === apt.patientId);
+    const doctor = employees.find(e => e.id === apt.doctorId);
+    const dept = departments.find(d => d.id === apt.departmentId);
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const content = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Visit Summary - ${patient?.firstName || 'Patient'} ${patient?.lastName || ''}</title>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+          body { font-family: 'Inter', sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; color: #1e293b; line-height: 1.5; }
+          .header { border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-start; }
+          .logo-text { font-size: 24px; font-weight: 800; color: #2563eb; letter-spacing: -0.5px; }
+          .sub-text { font-size: 13px; color: #64748b; margin-top: 4px; }
+          .meta { text-align: right; color: #64748b; font-size: 13px; }
+          .doc-title { font-size: 20px; font-weight: 700; color: #0f172a; margin-bottom: 24px; text-transform: uppercase; letter-spacing: 0.5px; }
+          
+          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 30px; }
+          .section { margin-bottom: 24px; }
+          .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; font-weight: 700; margin-bottom: 6px; }
+          .value { font-size: 15px; font-weight: 500; color: #0f172a; }
+          
+          .box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin-bottom: 30px; }
+          
+          .footer { margin-top: 60px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 12px; color: #94a3b8; display: flex; justify-content: space-between; }
+          
+          @media print {
+            body { padding: 20px; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <div class="logo-text">MediCore HMS</div>
+            <div class="sub-text">Excellence in Healthcare Management</div>
+          </div>
+          <div class="meta">
+            <div><strong>Generated:</strong> ${new Date().toLocaleString()}</div>
+            <div><strong>Ref ID:</strong> ${apt.id.substring(0, 8)}...</div>
+          </div>
+        </div>
+
+        <div class="doc-title">Clinical Visit Summary</div>
+
+        <div class="grid">
+          <div>
+            <div class="section">
+              <div class="label">Patient Details</div>
+              <div class="value" style="font-size: 18px;">${patient?.firstName} ${patient?.lastName}</div>
+              <div style="font-size: 14px; color: #475569; margin-top: 4px;">
+                <strong>DOB:</strong> ${patient?.dob || 'N/A'}<br>
+                <strong>Gender:</strong> ${patient?.gender || 'N/A'}<br>
+                <strong>Contact:</strong> ${patient?.phone || 'N/A'}
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="section">
+              <div class="label">Attending Physician</div>
+              <div class="value" style="font-size: 18px;">Dr. ${doctor?.firstName} ${doctor?.lastName}</div>
+              <div style="font-size: 14px; color: #475569; margin-top: 4px;">
+                <strong>Department:</strong> ${dept?.name || 'General'}<br>
+                <strong>Specialization:</strong> ${doctor?.specialization || 'N/A'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="box">
+          <div class="grid" style="margin-bottom: 0; gap: 20px;">
+             <div>
+               <div class="label">Appointment Date</div>
+               <div class="value">${new Date(apt.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+             </div>
+             <div>
+               <div class="label">Time</div>
+               <div class="value">${apt.time}</div>
+             </div>
+             <div>
+               <div class="label">Status</div>
+               <div class="value" style="color: #16a34a;">${apt.status}</div>
+             </div>
+             <div>
+               <div class="label">Type</div>
+               <div class="value">Consultation</div>
+             </div>
+          </div>
+        </div>
+
+        <div class="section">
+           <div class="label">Reported Symptoms</div>
+           <div class="value" style="background: #fff; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px;">
+             ${apt.symptoms || 'No specific symptoms recorded.'}
+           </div>
+        </div>
+        
+        <div class="section">
+           <div class="label">Clinical Notes / Diagnosis / Treatment</div>
+           <div class="value" style="background: #fff; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; min-height: 100px;">
+             ${apt.notes ? apt.notes.replace(/\n/g, '<br>') : '<span style="color: #94a3b8; font-style: italic;">No clinical notes added by the doctor.</span>'}
+           </div>
+        </div>
+
+        <div class="footer">
+           <div>Printed from MediCore Healthcare System</div>
+           <div>Confidential Medical Record</div>
+        </div>
+        <script>
+            setTimeout(() => {
+                window.print();
+            }, 500);
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(content);
+    printWindow.document.close();
+  };
+
   // Generate Slots based on availability and existing bookings
   useEffect(() => {
     if (!selectedDoctor || !selectedDate) {
@@ -53,7 +183,10 @@ export const Appointments = () => {
     }
 
     const dateObj = new Date(selectedDate);
-    const dayIndex = dateObj.getDay();
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    const localDate = new Date(y, m - 1, d); 
+    const dayIndex = localDate.getDay();
+
     const availability = availabilities.find(a => a.doctorId === selectedDoctor && a.dayOfWeek === dayIndex);
 
     if (!availability) {
@@ -70,11 +203,13 @@ export const Appointments = () => {
         const timeStr = current.toTimeString().substring(0, 5);
         
         // Check collision
+        // When editing, exclude the current appointment from collision checks (editingId)
         const isBooked = appointments.some(a => 
             a.doctorId === selectedDoctor && 
             a.date === selectedDate && 
             a.time === timeStr &&
-            a.status !== 'Cancelled'
+            a.status !== 'Cancelled' &&
+            a.id !== editingId 
         );
 
         if (!isBooked) slots.push(timeStr);
@@ -82,24 +217,60 @@ export const Appointments = () => {
     }
 
     setAvailableSlots(slots);
-  }, [selectedDoctor, selectedDate, availabilities, appointments]);
+  }, [selectedDoctor, selectedDate, availabilities, appointments, editingId]);
 
   const handleBooking = () => {
     if (!selectedSlot || !selectedPatient) return;
-    bookAppointment({
-        id: Date.now().toString(),
+    
+    if (editingId) {
+      updateAppointment(editingId, {
         patientId: selectedPatient,
         doctorId: selectedDoctor,
         departmentId: selectedDept,
         date: selectedDate,
         time: selectedSlot,
-        status: 'Scheduled',
         symptoms: symptoms
-    });
-    // Reset
-    setSelectedSlot('');
+      });
+      cancelEdit(); // Reset form
+    } else {
+      bookAppointment({
+          id: Date.now().toString(),
+          patientId: selectedPatient,
+          doctorId: selectedDoctor,
+          departmentId: selectedDept,
+          date: selectedDate,
+          time: selectedSlot,
+          status: 'Scheduled',
+          symptoms: symptoms
+      });
+      // Reset
+      setSelectedSlot('');
+      setAiAnalysis(null);
+      setSymptoms('');
+    }
+  };
+
+  const handleEditClick = (apt: Appointment) => {
+    setEditingId(apt.id);
+    setSelectedPatient(apt.patientId);
+    setSelectedDept(apt.departmentId);
+    setSelectedDoctor(apt.doctorId);
+    setSelectedDate(apt.date);
+    setSelectedSlot(apt.time);
+    setSymptoms(apt.symptoms || '');
     setAiAnalysis(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setSelectedPatient('');
+    setSelectedDept('');
+    setSelectedDoctor('');
+    setSelectedDate('');
+    setSelectedSlot('');
     setSymptoms('');
+    setAiAnalysis(null);
   };
 
   const handleCancelClick = (id: string) => {
@@ -112,6 +283,9 @@ export const Appointments = () => {
         cancelAppointment(appointmentToCancel);
         setIsCancelModalOpen(false);
         setAppointmentToCancel(null);
+        if (editingId === appointmentToCancel) {
+          cancelEdit();
+        }
     }
   };
 
@@ -142,52 +316,57 @@ export const Appointments = () => {
   return (
     <div className="space-y-8">
       
-      {/* SECTION 1: BOOKING INTERFACE */}
+      {/* SECTION 1: BOOKING / EDIT INTERFACE */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         {/* Left Col: AI Triage & Selection */}
         <div className="xl:col-span-1 space-y-6">
           
           {/* AI Symptom Checker */}
-          <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-6 text-white shadow-lg">
-              <div className="flex items-center mb-4">
-                  <Sparkles className="w-5 h-5 mr-2 text-yellow-300" />
-                  <h3 className="font-bold text-lg">AI Smart Triage</h3>
-              </div>
-              <p className="text-indigo-100 text-sm mb-4">Describe symptoms to get department recommendations.</p>
-              
-              <textarea 
-                  className="w-full bg-white/10 border border-white/20 rounded-lg p-3 text-white placeholder-indigo-200 text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
-                  rows={3}
-                  placeholder="e.g. Severe headache and sensitivity to light..."
-                  value={symptoms}
-                  onChange={e => setSymptoms(e.target.value)}
-              ></textarea>
-              
-              <button 
-                  onClick={handleAiTriage}
-                  disabled={isAnalyzing}
-                  className="mt-3 w-full bg-white text-indigo-700 font-bold py-2 rounded-lg text-sm hover:bg-indigo-50 transition-colors flex justify-center items-center"
-              >
-                  {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : 'Analyze Symptoms'}
-              </button>
+          {!editingId && (
+            <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-6 text-white shadow-lg">
+                <div className="flex items-center mb-4">
+                    <Sparkles className="w-5 h-5 mr-2 text-yellow-300" />
+                    <h3 className="font-bold text-lg">AI Smart Triage</h3>
+                </div>
+                <p className="text-indigo-100 text-sm mb-4">Describe symptoms to get department recommendations.</p>
+                
+                <textarea 
+                    className="w-full bg-white/10 border border-white/20 rounded-lg p-3 text-white placeholder-indigo-200 text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
+                    rows={3}
+                    placeholder="e.g. Severe headache and sensitivity to light..."
+                    value={symptoms}
+                    onChange={e => setSymptoms(e.target.value)}
+                ></textarea>
+                
+                <button 
+                    onClick={handleAiTriage}
+                    disabled={isAnalyzing}
+                    className="mt-3 w-full bg-white text-indigo-700 font-bold py-2 rounded-lg text-sm hover:bg-indigo-50 transition-colors flex justify-center items-center"
+                >
+                    {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : 'Analyze Symptoms'}
+                </button>
 
-              {aiAnalysis && (
-                  <div className="mt-4 bg-white/10 rounded-lg p-3 border border-white/20 animate-in fade-in slide-in-from-top-2">
-                      <p className="text-xs font-bold text-yellow-300 uppercase tracking-wide">Suggestion</p>
-                      <p className="font-semibold">{aiAnalysis.departmentName}</p>
-                      <div className="flex items-center gap-2 mt-2">
-                          <span className={`text-xs px-2 py-0.5 rounded ${
-                              aiAnalysis.urgency === 'High' ? 'bg-red-500/80' : 'bg-green-500/80'
-                          }`}>Urgency: {aiAnalysis.urgency}</span>
-                      </div>
-                      <p className="text-xs mt-2 opacity-80 italic">"{aiAnalysis.reasoning}"</p>
-                  </div>
-              )}
-          </div>
+                {aiAnalysis && (
+                    <div className="mt-4 bg-white/10 rounded-lg p-3 border border-white/20 animate-in fade-in slide-in-from-top-2">
+                        <p className="text-xs font-bold text-yellow-300 uppercase tracking-wide">Suggestion</p>
+                        <p className="font-semibold">{aiAnalysis.departmentName}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                            <span className={`text-xs px-2 py-0.5 rounded ${
+                                aiAnalysis.urgency === 'High' ? 'bg-red-500/80' : 'bg-green-500/80'
+                            }`}>Urgency: {aiAnalysis.urgency}</span>
+                        </div>
+                        <p className="text-xs mt-2 opacity-80 italic">"{aiAnalysis.reasoning}"</p>
+                    </div>
+                )}
+            </div>
+          )}
 
           {/* Booking Form */}
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-              <h3 className="font-bold text-slate-800 mb-4">Book New Appointment</h3>
+          <div className={`bg-white p-6 rounded-2xl shadow-sm border ${editingId ? 'border-yellow-400 ring-2 ring-yellow-100' : 'border-slate-200'}`}>
+              <div className="flex justify-between items-center mb-4">
+                 <h3 className="font-bold text-slate-800">{editingId ? 'Edit Appointment' : 'Book New Appointment'}</h3>
+                 {editingId && <span className="text-xs font-bold text-yellow-600 bg-yellow-50 px-2 py-1 rounded">EDITING MODE</span>}
+              </div>
               
               <div className="space-y-4">
                   <div>
@@ -220,15 +399,25 @@ export const Appointments = () => {
                   </div>
 
                   <div>
-                      <label className="form-label">Date</label>
-                      <input 
-                          type="date" 
-                          className="form-input" 
-                          value={selectedDate} 
-                          onChange={e => setSelectedDate(e.target.value)}
-                          min={new Date().toISOString().split('T')[0]}
+                      <DatePicker 
+                          label="Date"
+                          value={selectedDate}
+                          onChange={setSelectedDate}
+                          minDate={new Date().toISOString().split('T')[0]}
+                          placeholder="Select appointment date"
                       />
                   </div>
+                  
+                  {editingId && (
+                     <div>
+                         <label className="form-label">Symptoms / Notes</label>
+                         <textarea 
+                             className="form-input h-20"
+                             value={symptoms}
+                             onChange={e => setSymptoms(e.target.value)}
+                         />
+                     </div>
+                  )}
               </div>
           </div>
         </div>
@@ -274,13 +463,21 @@ export const Appointments = () => {
                   )}
               </div>
 
-              <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+                  {editingId && (
+                      <button 
+                          onClick={cancelEdit}
+                          className="bg-white text-slate-600 hover:bg-slate-100 border border-slate-300 px-6 py-3 rounded-xl font-bold transition-all"
+                      >
+                          Cancel Edit
+                      </button>
+                  )}
                   <button 
                       disabled={!selectedSlot || !selectedPatient}
                       onClick={handleBooking}
                       className="bg-blue-600 disabled:bg-slate-300 disabled:cursor-not-allowed hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-blue-200 transition-all transform active:scale-95"
                   >
-                      Confirm Appointment
+                      {editingId ? 'Save Changes' : 'Confirm Appointment'}
                   </button>
               </div>
           </div>
@@ -297,26 +494,25 @@ export const Appointments = () => {
            
            {/* Filters Toolbar */}
            <div className="flex flex-wrap items-center gap-3">
-               <div className="flex items-center bg-white border border-slate-300 rounded-lg px-3 py-1.5 shadow-sm">
-                   <Calendar className="w-4 h-4 text-slate-400 mr-2" />
-                   <input 
-                        type="date" 
-                        className="text-sm outline-none text-slate-600 w-32"
-                        placeholder="Start Date"
-                        value={filterStartDate}
-                        onChange={e => setFilterStartDate(e.target.value)}
-                   />
-                   <span className="text-slate-300 mx-2">to</span>
-                   <input 
-                        type="date" 
-                        className="text-sm outline-none text-slate-600 w-32"
-                        value={filterEndDate}
-                        onChange={e => setFilterEndDate(e.target.value)}
-                   />
+               <div className="w-36">
+                  <DatePicker 
+                    value={filterStartDate} 
+                    onChange={setFilterStartDate}
+                    placeholder="Start Date"
+                  />
+               </div>
+               <span className="text-slate-400">to</span>
+               <div className="w-36">
+                  <DatePicker 
+                    value={filterEndDate} 
+                    onChange={setFilterEndDate}
+                    placeholder="End Date"
+                    minDate={filterStartDate}
+                  />
                </div>
 
                <select 
-                    className="bg-white border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 shadow-sm outline-none focus:ring-2 focus:ring-blue-500"
+                    className="bg-white border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 shadow-sm outline-none focus:ring-2 focus:ring-blue-500 w-40"
                     value={filterDoctorId}
                     onChange={e => setFilterDoctorId(e.target.value)}
                >
@@ -325,7 +521,7 @@ export const Appointments = () => {
                </select>
 
                <select 
-                    className="bg-white border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 shadow-sm outline-none focus:ring-2 focus:ring-blue-500"
+                    className="bg-white border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 shadow-sm outline-none focus:ring-2 focus:ring-blue-500 w-36"
                     value={filterStatus}
                     onChange={e => setFilterStatus(e.target.value)}
                >
@@ -375,7 +571,7 @@ export const Appointments = () => {
                             const dept = departments.find(d => d.id === apt.departmentId);
                             
                             return (
-                                <tr key={apt.id} className="hover:bg-slate-50 transition-colors">
+                                <tr key={apt.id} className={`hover:bg-slate-50 transition-colors ${editingId === apt.id ? 'bg-yellow-50' : ''}`}>
                                     <td className="px-6 py-4">
                                         <div className="font-medium text-slate-900">{new Date(apt.date).toLocaleDateString()}</div>
                                         <div className="text-slate-500 flex items-center text-xs mt-0.5">
@@ -412,16 +608,36 @@ export const Appointments = () => {
                                         {apt.symptoms || '-'}
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        {apt.status === 'Scheduled' && (
-                                            <button 
-                                                onClick={() => handleCancelClick(apt.id)}
-                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 hover:text-red-700 transition-colors shadow-sm"
-                                                title="Cancel Appointment"
-                                            >
-                                                <XCircle className="w-4 h-4" />
-                                                Cancel
-                                            </button>
-                                        )}
+                                        <div className="flex justify-end gap-2">
+                                            {apt.status === 'Scheduled' && (
+                                                <>
+                                                  <button 
+                                                      onClick={() => handleEditClick(apt)}
+                                                      className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-1.5 rounded-lg transition-colors"
+                                                      title="Edit Appointment"
+                                                  >
+                                                      <Pencil className="w-4 h-4" />
+                                                  </button>
+                                                  <button 
+                                                      onClick={() => handleCancelClick(apt.id)}
+                                                      className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
+                                                      title="Cancel Appointment"
+                                                  >
+                                                      <XCircle className="w-4 h-4" />
+                                                  </button>
+                                                </>
+                                            )}
+                                            {apt.status === 'Completed' && (
+                                                <button 
+                                                    onClick={() => handlePrintSummary(apt)}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 hover:text-blue-700 transition-colors shadow-sm"
+                                                    title="Print Summary"
+                                                >
+                                                    <Printer className="w-4 h-4" />
+                                                    Summary
+                                                </button>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             );

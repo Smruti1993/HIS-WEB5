@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
-import { Search, Pencil, X, UserPlus } from 'lucide-react';
+import { Search, Pencil, X, UserPlus, Filter } from 'lucide-react';
 import { Patient } from '../types';
 
 export const Patients = () => {
@@ -65,10 +65,11 @@ export const Patients = () => {
     setFormData(initialFormState);
   };
 
-  const filteredPatients = patients.filter(p => 
-    p.lastName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    p.phone.includes(searchTerm)
-  );
+  const filteredPatients = patients.filter(p => {
+    const term = searchTerm.toLowerCase();
+    const fullName = `${p.firstName} ${p.lastName}`.toLowerCase();
+    return fullName.includes(term) || p.phone.includes(term);
+  });
 
   return (
     <div className="space-y-6">
@@ -142,15 +143,23 @@ export const Patients = () => {
       )}
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200">
-        <div className="p-4 border-b border-slate-100">
+        <div className="p-4 border-b border-slate-100 bg-slate-50/50">
             <div className="relative max-w-sm">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                 <input 
-                    className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none" 
+                    className="w-full pl-10 pr-8 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none transition-all" 
                     placeholder="Search by name or phone..."
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
                 />
+                {searchTerm && (
+                    <button 
+                        onClick={() => setSearchTerm('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                    >
+                        <X className="w-3.5 h-3.5" />
+                    </button>
+                )}
             </div>
         </div>
         <div className="overflow-x-auto">
@@ -165,26 +174,37 @@ export const Patients = () => {
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                    {filteredPatients.map(p => {
-                        const age = new Date().getFullYear() - new Date(p.dob).getFullYear();
-                        return (
-                            <tr key={p.id} className="hover:bg-slate-50 transition-colors group">
-                                <td className="px-6 py-4 font-medium text-slate-900">{p.firstName} {p.lastName}</td>
-                                <td className="px-6 py-4 text-slate-600">{age} Y / {p.gender}</td>
-                                <td className="px-6 py-4 text-slate-600">{p.phone}</td>
-                                <td className="px-6 py-4 text-slate-500">{new Date(p.registrationDate).toLocaleDateString()}</td>
-                                <td className="px-6 py-4 text-right">
-                                    <button 
-                                        onClick={() => handleEdit(p)}
-                                        className="text-slate-400 hover:text-blue-600 transition-colors p-2 rounded-full hover:bg-blue-50 opacity-0 group-hover:opacity-100 focus:opacity-100"
-                                        title="Edit Patient Details"
-                                    >
-                                        <Pencil className="w-4 h-4" />
-                                    </button>
-                                </td>
-                            </tr>
-                        );
-                    })}
+                    {filteredPatients.length === 0 ? (
+                        <tr>
+                            <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
+                                <div className="flex flex-col items-center">
+                                    <Filter className="w-8 h-8 mb-2 opacity-30" />
+                                    No patients found matching "{searchTerm}"
+                                </div>
+                            </td>
+                        </tr>
+                    ) : (
+                        filteredPatients.map(p => {
+                            const age = new Date().getFullYear() - new Date(p.dob).getFullYear();
+                            return (
+                                <tr key={p.id} className="hover:bg-slate-50 transition-colors group">
+                                    <td className="px-6 py-4 font-medium text-slate-900">{p.firstName} {p.lastName}</td>
+                                    <td className="px-6 py-4 text-slate-600">{age} Y / {p.gender}</td>
+                                    <td className="px-6 py-4 text-slate-600">{p.phone}</td>
+                                    <td className="px-6 py-4 text-slate-500">{new Date(p.registrationDate).toLocaleDateString()}</td>
+                                    <td className="px-6 py-4 text-right">
+                                        <button 
+                                            onClick={() => handleEdit(p)}
+                                            className="text-slate-400 hover:text-blue-600 transition-colors p-2 rounded-full hover:bg-blue-50 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                            title="Edit Patient Details"
+                                        >
+                                            <Pencil className="w-4 h-4" />
+                                        </button>
+                                    </td>
+                                </tr>
+                            );
+                        })
+                    )}
                 </tbody>
             </table>
         </div>

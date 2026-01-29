@@ -34,6 +34,7 @@ interface DataContextType {
   
   appointments: Appointment[];
   bookAppointment: (apt: Appointment) => void;
+  updateAppointment: (id: string, data: Partial<Appointment>) => void;
   cancelAppointment: (id: string) => void;
   
   toasts: ToastMessage[];
@@ -417,6 +418,27 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const updateAppointment = async (id: string, data: Partial<Appointment>) => {
+    if (!requireDb()) return;
+
+    const original = appointments.find(a => a.id === id);
+    setAppointments(prev => prev.map(a => a.id === id ? { ...a, ...data } : a));
+    
+    // We merge with original to ensure mapAptToDb has all required fields if needed, or Supabase handles partial updates.
+    // mapAptToDb expects a full object structure for simplicity in this demo.
+    const fullData = { ...original, ...data };
+    
+    const { error } = await getSupabase().from('appointments').update(mapAptToDb(fullData)).eq('id', id);
+    
+    if (error) {
+        console.error("Update error:", error);
+        showToast('error', `Failed to update appointment: ${error.message}`);
+        if (original) setAppointments(prev => prev.map(a => a.id === id ? original : a));
+    } else {
+        showToast('success', 'Appointment updated successfully.');
+    }
+  };
+
   const cancelAppointment = async (id: string) => {
     if (!requireDb()) return;
 
@@ -444,7 +466,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       units, addUnit,
       serviceCentres, addServiceCentre,
       availabilities, saveAvailability, deleteAvailability,
-      appointments, bookAppointment, cancelAppointment,
+      appointments, bookAppointment, updateAppointment, cancelAppointment,
       toasts, showToast, removeToast,
       isLoading, isDbConnected, updateDbConnection, disconnectDb
     }}>
