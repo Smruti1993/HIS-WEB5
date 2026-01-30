@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
-import { User, Info, Save, Printer, FileText, Bell, Activity, Stethoscope, Briefcase, Pill, Clock, AlertTriangle, FileInput, ChevronRight, X, ChevronDown, RefreshCw } from 'lucide-react';
+import { User, Info, Save, Printer, FileText, Bell, Activity, Stethoscope, Briefcase, Pill, Clock, AlertTriangle, FileInput, ChevronRight, X, ChevronDown, RefreshCw, Bold, Italic, Underline, List } from 'lucide-react';
 import { ClinicalNote } from '../types';
 
 const SIDEBAR_ITEMS = [
@@ -37,6 +37,7 @@ export const Consultation = () => {
     const [activeSection, setActiveSection] = useState('Chief Complaint');
     const [noteContent, setNoteContent] = useState('');
     const [lastEdited, setLastEdited] = useState<string | null>(null);
+    const editorRef = useRef<HTMLDivElement>(null);
 
     const appointment = appointments.find(a => a.id === appointmentId);
     const patient = patients.find(p => p.id === appointment?.patientId);
@@ -49,11 +50,29 @@ export const Consultation = () => {
     useEffect(() => {
         if (!appointmentId) return;
         const note = clinicalNotes.find(n => n.appointmentId === appointmentId && n.noteType === activeSection);
-        setNoteContent(note?.description || '');
+        const content = note?.description || '';
+        
+        // Update state
+        setNoteContent(content);
         setLastEdited(note?.recordedAt ? new Date(note.recordedAt).toLocaleString() : null);
+
+        // Update editor HTML if it differs to avoid cursor jumps on simple re-renders, 
+        // but ensure we update on section switch.
+        if (editorRef.current && editorRef.current.innerHTML !== content) {
+            editorRef.current.innerHTML = content;
+        }
     }, [activeSection, appointmentId, clinicalNotes]);
 
     // --- Handlers ---
+
+    const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
+        setNoteContent(e.currentTarget.innerHTML);
+    };
+
+    const execCommand = (command: string) => {
+        document.execCommand(command, false, undefined);
+        editorRef.current?.focus();
+    };
 
     const handleSaveNote = () => {
         if (!appointmentId) return;
@@ -173,20 +192,61 @@ export const Consultation = () => {
                     </div>
 
                     {/* Editor Toolbar */}
-                    <div className="border-b border-slate-200 p-2 flex items-center gap-2 bg-slate-50 text-xs shrink-0">
+                    <div className="border-b border-slate-200 p-2 flex items-center gap-2 bg-slate-50 text-xs shrink-0 select-none">
                         <div className="font-bold text-blue-800 flex items-center cursor-pointer hover:bg-slate-200 px-2 py-1 rounded">
                             Select Field <ChevronDown className="w-3 h-3 ml-1" />
                         </div>
+                        
+                        <div className="w-px h-5 bg-slate-300 mx-2"></div>
+                        
+                        <div className="flex items-center gap-1">
+                            <button 
+                                onClick={() => execCommand('bold')} 
+                                className="p-1.5 hover:bg-slate-200 rounded text-slate-600 transition-colors" 
+                                title="Bold (Ctrl+B)"
+                            >
+                                <Bold size={16} />
+                            </button>
+                            <button 
+                                onClick={() => execCommand('italic')} 
+                                className="p-1.5 hover:bg-slate-200 rounded text-slate-600 transition-colors" 
+                                title="Italic (Ctrl+I)"
+                            >
+                                <Italic size={16} />
+                            </button>
+                            <button 
+                                onClick={() => execCommand('underline')} 
+                                className="p-1.5 hover:bg-slate-200 rounded text-slate-600 transition-colors" 
+                                title="Underline (Ctrl+U)"
+                            >
+                                <Underline size={16} />
+                            </button>
+                            <button 
+                                onClick={() => execCommand('insertUnorderedList')} 
+                                className="p-1.5 hover:bg-slate-200 rounded text-slate-600 transition-colors" 
+                                title="Bullet List"
+                            >
+                                <List size={16} />
+                            </button>
+                        </div>
+                        
+                        <div className="w-px h-5 bg-slate-300 mx-2"></div>
+                        
                         <div className="flex-1 text-center font-bold text-slate-600">Description</div>
                     </div>
 
-                    {/* Text Area */}
-                    <div className="flex-1 p-4 overflow-auto bg-slate-50/30">
-                        <textarea
-                            className="w-full h-full border border-slate-300 rounded p-4 text-sm text-slate-800 leading-relaxed focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none shadow-inner"
-                            placeholder={`Enter ${activeSection} here...`}
-                            value={noteContent}
-                            onChange={e => setNoteContent(e.target.value)}
+                    {/* Rich Text Editor Area */}
+                    <div 
+                        className="flex-1 p-4 overflow-auto bg-slate-50/30 cursor-text" 
+                        onClick={() => editorRef.current?.focus()}
+                    >
+                        <div
+                            ref={editorRef}
+                            contentEditable
+                            onInput={handleInput}
+                            className="w-full min-h-full border border-slate-300 rounded p-4 text-sm text-slate-800 leading-relaxed focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white shadow-inner prose prose-sm max-w-none"
+                            style={{ minHeight: '300px' }}
+                            data-placeholder={`Enter ${activeSection} here...`}
                         />
                     </div>
 

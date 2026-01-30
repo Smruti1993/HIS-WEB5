@@ -1,13 +1,294 @@
 import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
 import { DatePicker } from '../components/DatePicker';
-import { Search, RefreshCw, User, Activity, FileText, FlaskConical, Stethoscope, Microscope, CheckCircle, AlertCircle, Plus, X } from 'lucide-react';
-import { Appointment } from '../types';
+import { Search, User, Activity, FileText, FlaskConical, Stethoscope, Microscope, CheckCircle, AlertCircle, Plus, X, Calendar, Clock, StickyNote, AlertTriangle, ChevronRight, Pill, History, Thermometer } from 'lucide-react';
+import { Appointment, Patient, VitalSign, ClinicalNote, Diagnosis, Allergy } from '../types';
 import { useNavigate } from 'react-router-dom';
 
+const EMRModal = ({ patientId, onClose }: { patientId: string, onClose: () => void }) => {
+    const { patients, appointments, vitals, diagnoses, clinicalNotes, allergies, employees, departments } = useData();
+    const [activeTab, setActiveTab] = useState('Overview');
+
+    const patient = patients.find(p => p.id === patientId);
+    if (!patient) return null;
+
+    // Filter Data
+    const patientApts = appointments.filter(a => a.patientId === patientId).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const aptIds = patientApts.map(a => a.id);
+    
+    const patientVitals = vitals.filter(v => aptIds.includes(v.appointmentId)).sort((a,b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime());
+    const patientDiagnoses = diagnoses.filter(d => aptIds.includes(d.appointmentId)).sort((a,b) => new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime());
+    const patientNotes = clinicalNotes.filter(n => aptIds.includes(n.appointmentId)).sort((a,b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime());
+    const patientAllergies = allergies.filter(a => a.patientId === patientId);
+
+    const getDocName = (id: string) => {
+        const doc = employees.find(e => e.id === id);
+        return doc ? `Dr. ${doc.firstName} ${doc.lastName}` : 'Unknown';
+    };
+
+    const getDeptName = (id: string) => {
+        const d = departments.find(dept => dept.id === id);
+        return d ? d.name : '-';
+    };
+
+    const age = new Date().getFullYear() - new Date(patient.dob).getFullYear();
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+             <div className="bg-white w-full max-w-6xl h-[85vh] rounded-2xl shadow-2xl flex overflow-hidden border border-slate-200">
+                {/* Sidebar */}
+                <div className="w-64 bg-slate-50 border-r border-slate-200 flex flex-col shrink-0">
+                    {/* Patient Info */}
+                    <div className="p-6 border-b border-slate-200 bg-white">
+                         <div className="w-16 h-16 bg-blue-100 rounded-full mx-auto mb-3 flex items-center justify-center text-blue-600 border-2 border-blue-50">
+                            <User className="w-8 h-8" />
+                         </div>
+                         <h3 className="text-center font-bold text-slate-800 text-lg">{patient.firstName} {patient.lastName}</h3>
+                         <div className="text-center text-xs text-slate-500 mt-1">{patient.gender.toUpperCase()} • {age} Years</div>
+                         <div className="text-center text-xs text-slate-400 mt-1 font-mono">ID: {patient.id.slice(-6).toUpperCase()}</div>
+                    </div>
+                    {/* Nav */}
+                    <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+                        {['Overview', 'Clinical Notes', 'Vitals History', 'Visit History', 'Allergies'].map(t => (
+                            <button 
+                                key={t} 
+                                onClick={() => setActiveTab(t)}
+                                className={`w-full flex items-center justify-between px-4 py-3 text-sm font-medium rounded-lg transition-all ${
+                                    activeTab === t 
+                                    ? 'bg-blue-600 text-white shadow-md' 
+                                    : 'text-slate-600 hover:bg-slate-200'
+                                }`}
+                            >
+                                {t}
+                                {activeTab === t && <ChevronRight className="w-4 h-4 opacity-75" />}
+                            </button>
+                        ))}
+                    </nav>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 flex flex-col min-w-0 bg-slate-50/30">
+                    <div className="h-16 border-b border-slate-200 flex items-center justify-between px-8 bg-white shrink-0">
+                        <div className="flex items-center gap-2">
+                            <FileText className="w-5 h-5 text-blue-600" />
+                            <h2 className="text-xl font-bold text-slate-800">Electronic Medical Record</h2>
+                        </div>
+                        <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors">
+                            <X className="w-6 h-6" />
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-8">
+                        {/* OVERVIEW TAB */}
+                        {activeTab === 'Overview' && (
+                            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                                        <div className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Last Visit</div>
+                                        <div className="font-bold text-slate-800 text-lg">
+                                            {patientApts[0] ? new Date(patientApts[0].date).toLocaleDateString() : 'N/A'}
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                                        <div className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Total Visits</div>
+                                        <div className="font-bold text-slate-800 text-lg">{patientApts.length}</div>
+                                    </div>
+                                    <div className={`p-4 rounded-xl shadow-sm border ${patientAllergies.length > 0 ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'}`}>
+                                        <div className={`text-xs font-bold uppercase tracking-wider mb-1 ${patientAllergies.length > 0 ? 'text-red-600' : 'text-green-600'}`}>Active Allergies</div>
+                                        <div className={`font-bold text-lg ${patientAllergies.length > 0 ? 'text-red-700' : 'text-green-700'}`}>{patientAllergies.length}</div>
+                                    </div>
+                                    <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                                        <div className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Last BP</div>
+                                        <div className="font-bold text-slate-800 text-lg">
+                                            {patientVitals[0] ? `${patientVitals[0].bpSystolic}/${patientVitals[0].bpDiastolic}` : '-'}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                                        <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                            <Activity className="w-4 h-4 text-blue-500" /> Recent Vitals
+                                        </h4>
+                                        {patientVitals.length > 0 ? (
+                                            <div className="space-y-3">
+                                                {patientVitals.slice(0, 3).map((v, i) => (
+                                                    <div key={i} className="flex justify-between items-center text-sm border-b border-slate-50 pb-2 last:border-0">
+                                                        <span className="text-slate-500">{new Date(v.recordedAt).toLocaleDateString()}</span>
+                                                        <span className="font-medium">BP: {v.bpSystolic}/{v.bpDiastolic} &bull; HR: {v.pulse} &bull; T: {v.temperature}°C</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : <div className="text-slate-400 text-sm italic">No vitals recorded.</div>}
+                                    </div>
+
+                                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                                        <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                            <AlertTriangle className="w-4 h-4 text-orange-500" /> Recent Diagnosis
+                                        </h4>
+                                        {patientDiagnoses.length > 0 ? (
+                                            <div className="space-y-3">
+                                                {patientDiagnoses.slice(0, 3).map((d, i) => (
+                                                    <div key={i} className="flex justify-between items-center text-sm border-b border-slate-50 pb-2 last:border-0">
+                                                        <span className="font-medium text-slate-800">{d.description}</span>
+                                                        <span className="text-xs px-2 py-0.5 bg-slate-100 rounded text-slate-500">{d.type}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : <div className="text-slate-400 text-sm italic">No diagnosis recorded.</div>}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* CLINICAL NOTES TAB */}
+                        {activeTab === 'Clinical Notes' && (
+                            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                                {patientNotes.length === 0 ? (
+                                    <div className="text-center py-10 text-slate-400">No clinical notes found.</div>
+                                ) : (
+                                    patientNotes.map((note, idx) => {
+                                        const apt = patientApts.find(a => a.id === note.appointmentId);
+                                        return (
+                                            <div key={idx} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                                                <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 flex justify-between items-center">
+                                                    <div className="flex items-center gap-2">
+                                                        <Calendar className="w-3 h-3 text-slate-400" />
+                                                        <span className="text-xs font-bold text-slate-600">
+                                                            {new Date(note.recordedAt).toLocaleString()}
+                                                        </span>
+                                                        <span className="text-slate-300">|</span>
+                                                        <span className="text-xs font-medium text-blue-600">{note.noteType}</span>
+                                                    </div>
+                                                    <span className="text-xs text-slate-400">{getDocName(apt?.doctorId || '')}</span>
+                                                </div>
+                                                <div className="p-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={{__html: note.description}} />
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        )}
+
+                        {/* VITALS HISTORY TAB */}
+                        {activeTab === 'Vitals History' && (
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-2">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-slate-50 text-slate-500">
+                                        <tr>
+                                            <th className="px-6 py-3 font-semibold">Date & Time</th>
+                                            <th className="px-6 py-3 font-semibold">BP (mmHg)</th>
+                                            <th className="px-6 py-3 font-semibold">Pulse (bpm)</th>
+                                            <th className="px-6 py-3 font-semibold">Temp (°C)</th>
+                                            <th className="px-6 py-3 font-semibold">SpO2 (%)</th>
+                                            <th className="px-6 py-3 font-semibold">Weight (kg)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {patientVitals.length === 0 ? (
+                                            <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-400">No vitals recorded.</td></tr>
+                                        ) : (
+                                            patientVitals.map(v => (
+                                                <tr key={v.id} className="hover:bg-slate-50">
+                                                    <td className="px-6 py-4">{new Date(v.recordedAt).toLocaleString()}</td>
+                                                    <td className="px-6 py-4">{v.bpSystolic}/{v.bpDiastolic}</td>
+                                                    <td className="px-6 py-4">{v.pulse}</td>
+                                                    <td className="px-6 py-4">{v.temperature}</td>
+                                                    <td className="px-6 py-4">{v.spo2}%</td>
+                                                    <td className="px-6 py-4">{v.weight}</td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {/* VISIT HISTORY TAB */}
+                        {activeTab === 'Visit History' && (
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-2">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-slate-50 text-slate-500">
+                                        <tr>
+                                            <th className="px-6 py-3 font-semibold">Date</th>
+                                            <th className="px-6 py-3 font-semibold">Doctor</th>
+                                            <th className="px-6 py-3 font-semibold">Department</th>
+                                            <th className="px-6 py-3 font-semibold">Status</th>
+                                            <th className="px-6 py-3 font-semibold">Type</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {patientApts.map(apt => (
+                                            <tr key={apt.id} className="hover:bg-slate-50">
+                                                <td className="px-6 py-4 font-medium">{new Date(apt.date).toLocaleDateString()}</td>
+                                                <td className="px-6 py-4">{getDocName(apt.doctorId)}</td>
+                                                <td className="px-6 py-4">{getDeptName(apt.departmentId)}</td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${
+                                                        apt.status === 'Completed' ? 'bg-green-100 text-green-700' : 
+                                                        apt.status === 'Cancelled' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                                                    }`}>
+                                                        {apt.status}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-slate-500">{apt.visitType || 'New Visit'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {/* ALLERGIES TAB */}
+                        {activeTab === 'Allergies' && (
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-2">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-slate-50 text-slate-500">
+                                        <tr>
+                                            <th className="px-6 py-3 font-semibold">Allergen</th>
+                                            <th className="px-6 py-3 font-semibold">Severity</th>
+                                            <th className="px-6 py-3 font-semibold">Reaction</th>
+                                            <th className="px-6 py-3 font-semibold">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {patientAllergies.length === 0 ? (
+                                            <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400">No allergies recorded.</td></tr>
+                                        ) : (
+                                            patientAllergies.map(al => (
+                                                <tr key={al.id} className="hover:bg-slate-50">
+                                                    <td className="px-6 py-4 font-bold text-slate-700">{al.allergen}</td>
+                                                    <td className="px-6 py-4">
+                                                        <span className={`px-2 py-1 rounded text-xs font-bold ${
+                                                            al.severity === 'Severe' ? 'bg-red-100 text-red-700' :
+                                                            al.severity === 'Moderate' ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'
+                                                        }`}>
+                                                            {al.severity}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4">{al.reaction}</td>
+                                                    <td className="px-6 py-4 text-slate-500">{al.status}</td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
+             </div>
+        </div>
+    );
+};
+
 export const DoctorWorkbench = () => {
-  const { appointments, patients, vitals, diagnoses, saveVitalSign, updateAppointment, bills } = useData();
+  const { appointments, patients, vitals, diagnoses, saveVitalSign, updateAppointment, bills, clinicalNotes, allergies, employees, departments } = useData();
   const navigate = useNavigate();
+
+  // --- EMR State ---
+  const [showEMR, setShowEMR] = useState(false);
+  const [emrPatientId, setEmrPatientId] = useState<string | null>(null);
 
   // --- Filter State ---
   const [visitDate, setVisitDate] = useState(new Date().toISOString().split('T')[0]);
@@ -84,6 +365,11 @@ export const DoctorWorkbench = () => {
           updateAppointment(apt.id, { status: 'Checked-In', checkInTime: new Date().toISOString() });
       }
       navigate(`/consultation/${apt.id}`);
+  };
+
+  const handleOpenEMR = (patientId: string) => {
+      setEmrPatientId(patientId);
+      setShowEMR(true);
   };
 
   return (
@@ -205,7 +491,11 @@ export const DoctorWorkbench = () => {
                                       </div>
                                   </td>
                                   <td className="p-2 border-r border-slate-200 text-center align-middle">
-                                      <button className="text-blue-600 hover:text-blue-800">
+                                      <button 
+                                          onClick={() => handleOpenEMR(apt.patientId)}
+                                          className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-2 rounded-full transition-colors"
+                                          title="View EMR"
+                                      >
                                           <FileText className="w-5 h-5 mx-auto" />
                                       </button>
                                   </td>
@@ -352,6 +642,11 @@ export const DoctorWorkbench = () => {
                   </form>
               </div>
           </div>
+      )}
+
+      {/* EMR Modal */}
+      {showEMR && emrPatientId && (
+          <EMRModal patientId={emrPatientId} onClose={() => setShowEMR(false)} />
       )}
 
       {/* Footer Legend */}
