@@ -1,32 +1,36 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
-import { User, Info, Save, Printer, FileText, Bell, Activity, Stethoscope, Briefcase, Pill, Clock, AlertTriangle, FileInput, ChevronRight, X, ChevronDown, RefreshCw, Bold, Italic, Underline, List } from 'lucide-react';
-import { ClinicalNote } from '../types';
+import { 
+  User, Info, Save, Printer, FileText, Bell, Activity, Stethoscope, Briefcase, 
+  Pill, Clock, FileInput, ChevronRight, ChevronDown, 
+  Bold, Italic, Underline, List, AlignLeft, Type, Download, XCircle
+} from 'lucide-react';
 
+// --- Static Configs ---
 const SIDEBAR_ITEMS = [
     { id: 'Chief Complaint', label: 'Chief Complaint' },
+    { id: 'History of Present Illness', label: 'History of Present Illness' },
     { id: 'Past History', label: 'Past History' },
     { id: 'Family History', label: 'Family History' },
     { id: 'Medication History', label: 'Medication History' },
-    { id: 'History of Present Illness', label: 'History of Present Illness' },
-    { id: 'Significant Sign', label: 'Significant Sign' },
-    { id: 'Treatment Desc', label: 'Treatment Desc' },
+    { id: 'Allergies', label: 'Allergies & Intolerances' },
+    { id: 'Review of Systems', label: 'Review of Systems' },
+    { id: 'Physical Examination', label: 'Physical Examination' },
+    { id: 'Significant Sign', label: 'Significant Signs' },
+    { id: 'Diagnosis', label: 'Provisional Diagnosis' },
     { id: 'Treatment Plan', label: 'Treatment Plan' },
-    { id: 'Remark', label: 'Remark' },
+    { id: 'Treatment Desc', label: 'Prescription Notes' },
+    { id: 'Remark', label: 'Doctor Remarks' },
 ];
 
-const TOP_BUTTONS = [
-    { id: 'Allergy', label: 'Allergy(F8)', icon: Bell },
-    { id: 'Vital Sign', label: 'Vital Sign(F7)', icon: Activity },
-    { id: 'Encounter', label: 'Encounter(F4)', icon: Stethoscope },
-    { id: 'EMR', label: 'EMR', icon: FileText },
-    { id: 'Referral', label: 'Referral', icon: Briefcase },
-    { id: 'Diagnosis', label: 'Diagnosis(F5)', icon: Info },
-    { id: 'Patient Form', label: 'Patient Form', icon: FileInput },
-    { id: 'Orders', label: 'Orders(F3)', icon: FileText },
-    { id: 'Documents', label: 'Documents', icon: FileText },
-    { id: 'Patient Signed Form', label: 'Patient Signed Form', icon: FileText },
+const TOP_TOOLS = [
+    { id: 'Vitals', label: 'Vitals (F7)', icon: Activity, color: 'text-blue-600' },
+    { id: 'Allergy', label: 'Allergy (F8)', icon: Bell, color: 'text-red-600' },
+    { id: 'Diagnosis', label: 'Diagnosis (F5)', icon: Info, color: 'text-amber-600' },
+    { id: 'Orders', label: 'CPOE Orders (F3)', icon: Pill, color: 'text-emerald-600' },
+    { id: 'Documents', label: 'Documents', icon: FileText, color: 'text-slate-600' },
+    { id: 'Referral', label: 'Referral', icon: Briefcase, color: 'text-purple-600' },
 ];
 
 export const Consultation = () => {
@@ -45,26 +49,20 @@ export const Consultation = () => {
     const dept = departments.find(d => d.id === appointment?.departmentId);
 
     // --- Effects ---
-
-    // Load note for active section
     useEffect(() => {
         if (!appointmentId) return;
         const note = clinicalNotes.find(n => n.appointmentId === appointmentId && n.noteType === activeSection);
         const content = note?.description || '';
         
-        // Update state
         setNoteContent(content);
         setLastEdited(note?.recordedAt ? new Date(note.recordedAt).toLocaleString() : null);
 
-        // Update editor HTML if it differs to avoid cursor jumps on simple re-renders, 
-        // but ensure we update on section switch.
         if (editorRef.current && editorRef.current.innerHTML !== content) {
             editorRef.current.innerHTML = content;
         }
     }, [activeSection, appointmentId, clinicalNotes]);
 
     // --- Handlers ---
-
     const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
         setNoteContent(e.currentTarget.innerHTML);
     };
@@ -87,220 +85,253 @@ export const Consultation = () => {
 
     const handleEndEncounter = () => {
         if (!appointmentId) return;
-        updateAppointment(appointmentId, { status: 'Completed', checkOutTime: new Date().toISOString() });
-        navigate('/doctor-workbench');
-        showToast('success', 'Encounter ended successfully.');
+        if (window.confirm('Are you sure you want to Complete and End this encounter?')) {
+            updateAppointment(appointmentId, { status: 'Completed', checkOutTime: new Date().toISOString() });
+            navigate('/doctor-workbench');
+            showToast('success', 'Encounter ended successfully.');
+        }
     };
 
     const handleCancelEncounter = () => {
-        if (window.confirm('Are you sure you want to cancel this encounter? Unsaved changes may be lost.')) {
+        if (window.confirm('Close consultation without completing? Unsaved notes in the current editor may be lost.')) {
             navigate('/doctor-workbench');
         }
     };
 
     if (!appointment || !patient) {
-        return <div className="p-8 text-center text-slate-500">Loading consultation details...</div>;
+        return (
+            <div className="flex h-screen items-center justify-center bg-slate-100">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-slate-500 font-medium">Loading Patient Context...</p>
+                </div>
+            </div>
+        );
     }
 
     const age = new Date().getFullYear() - new Date(patient.dob).getFullYear();
 
     return (
-        <div className="flex flex-col h-screen bg-slate-100 overflow-hidden -m-6 fixed inset-0 z-50">
-            {/* Header */}
-            <div className="h-14 bg-white border-b flex justify-between items-center px-4 shrink-0">
-                <h1 className="font-bold text-lg text-slate-800">Start Consultation</h1>
-                <div className="flex items-center text-xs font-medium text-slate-600 space-x-4">
-                    <span><strong>Consultant:</strong> Dr {doctor?.firstName} {doctor?.lastName}</span>
-                    <span><strong>Dept:</strong> {dept?.name}</span>
-                    <span><strong>Start:</strong> {new Date().toLocaleString()}</span>
-                    <span className="bg-slate-200 px-2 py-1 rounded flex items-center"><Clock className="w-3 h-3 mr-1"/> 20:04</span>
+        // Main Container: Fixed Full Screen, No Window Scroll
+        <div className="fixed inset-0 z-50 flex flex-col bg-slate-100 font-sans text-sm overflow-hidden">
+            
+            {/* 1. TOP HEADER: System Info */}
+            <div className="h-10 bg-white border-b border-slate-200 flex justify-between items-center px-4 shrink-0 shadow-sm z-20">
+                <div className="flex items-center gap-2">
+                    <div className="bg-blue-600 text-white font-bold px-2 py-0.5 rounded text-xs">EMR</div>
+                    <h1 className="font-bold text-slate-700">Consultation Room</h1>
+                </div>
+                <div className="flex items-center text-xs text-slate-500 space-x-4">
+                    <div className="flex items-center gap-1">
+                        <User className="w-3 h-3" /> 
+                        <span>Dr. {doctor?.lastName}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <Briefcase className="w-3 h-3" /> 
+                        <span>{dept?.name}</span>
+                    </div>
+                    <div className="flex items-center gap-1 bg-green-50 text-green-700 px-2 py-0.5 rounded border border-green-100">
+                        <Clock className="w-3 h-3" />
+                        <span>Started: {new Date().toLocaleTimeString()}</span>
+                    </div>
                 </div>
             </div>
 
-            {/* Patient Banner */}
-            <div className="bg-[#00aaff] text-white px-4 py-2 flex items-start gap-4 shrink-0 shadow-md">
-                <div className="w-12 h-12 bg-white rounded-lg overflow-hidden border-2 border-white/50 shrink-0">
-                    <User className="w-full h-full text-slate-300 p-1" />
-                </div>
-                <div className="flex-1 text-sm space-y-1">
-                    <div className="flex flex-wrap gap-x-6 gap-y-1 font-medium">
-                        <span><strong>MRNO:</strong> {patient.id.slice(0, 12).toUpperCase()}</span>
-                        <span><strong>Name:</strong> {patient.firstName} {patient.lastName}</span>
-                        <span><strong>Gender:</strong> {patient.gender.toUpperCase()}</span>
-                        <span><strong>Age:</strong> {age} Years</span>
-                        <span><strong>Phone:</strong> {patient.phone}</span>
+            {/* 2. PATIENT BANNER: High Contrast */}
+            <div className="bg-gradient-to-r from-slate-800 to-slate-900 text-white p-3 shrink-0 shadow-md z-20">
+                <div className="flex items-center gap-4">
+                    {/* Avatar */}
+                    <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center border border-white/20 shrink-0">
+                        <span className="text-lg font-bold text-white">{patient.firstName[0]}{patient.lastName[0]}</span>
                     </div>
-                    <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs opacity-90">
-                        <span><strong>Last Seen By:</strong> Dr {doctor?.firstName} {doctor?.lastName}</span>
-                        <span><strong>Visit No:</strong> {appointment.id.slice(-6)}</span>
-                        <span><strong>Code Status:</strong> Allergy/Immunology</span>
+
+                    {/* Info Grid */}
+                    <div className="flex-1 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-6 gap-y-1 items-center">
+                        <div>
+                            <span className="text-slate-400 text-[10px] uppercase font-bold block">Patient Name</span>
+                            <span className="font-medium text-sm truncate block" title={`${patient.firstName} ${patient.lastName}`}>
+                                {patient.firstName} {patient.lastName}
+                            </span>
+                        </div>
+                        <div>
+                            <span className="text-slate-400 text-[10px] uppercase font-bold block">MRN / ID</span>
+                            <span className="font-mono text-xs text-yellow-300 block">{patient.id.slice(0,8).toUpperCase()}</span>
+                        </div>
+                        <div>
+                            <span className="text-slate-400 text-[10px] uppercase font-bold block">Demographics</span>
+                            <span className="text-xs block">{age} Y / {patient.gender}</span>
+                        </div>
+                        <div>
+                             <span className="text-slate-400 text-[10px] uppercase font-bold block">Contact</span>
+                             <span className="text-xs block truncate">{patient.phone}</span>
+                        </div>
+                        <div className="md:col-span-2 lg:col-span-2">
+                            <span className="text-slate-400 text-[10px] uppercase font-bold block">Active Package</span>
+                            <span className="text-xs text-slate-300 italic block">No active insurance package linked</span>
+                        </div>
                     </div>
-                    <div className="text-xs opacity-80 pt-1 border-t border-white/20 mt-1">
-                        <strong>Package Status:</strong> No Active Package
+
+                    {/* Quick Alerts */}
+                    <div className="flex flex-col gap-1 shrink-0">
+                        <button className="bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-500/50 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-colors">
+                            <Bell className="w-3 h-3" /> Allergies
+                        </button>
+                        <button className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 border border-blue-500/50 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-colors">
+                            <Info className="w-3 h-3" /> Alerts
+                        </button>
                     </div>
-                </div>
-                <div className="flex flex-col gap-1">
-                    <button className="p-1 hover:bg-white/20 rounded"><Pill className="w-4 h-4" /></button>
-                    <button className="p-1 hover:bg-white/20 rounded"><Info className="w-4 h-4" /></button>
                 </div>
             </div>
 
-            {/* Top Toolbar */}
-            <div className="bg-[#0088cc] flex overflow-x-auto text-white text-xs font-medium shadow-inner shrink-0">
-                {TOP_BUTTONS.map(btn => (
-                    <button key={btn.id} className="flex items-center px-4 py-2 hover:bg-white/10 border-r border-white/10 whitespace-nowrap transition-colors">
-                        <btn.icon className="w-4 h-4 mr-2" />
-                        {btn.label}
+            {/* 3. TOOLBAR: Utility Ribbon */}
+            <div className="bg-white border-b border-slate-200 px-2 py-1.5 flex gap-2 overflow-x-auto shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.05)] z-10">
+                {TOP_TOOLS.map((tool) => (
+                    <button 
+                        key={tool.id}
+                        className="flex flex-col items-center justify-center min-w-[80px] px-2 py-1.5 rounded hover:bg-slate-50 hover:text-blue-600 text-slate-600 transition-all active:scale-95 group"
+                    >
+                        <tool.icon className={`w-5 h-5 mb-1 ${tool.color} group-hover:scale-110 transition-transform`} />
+                        <span className="text-[10px] font-bold">{tool.label}</span>
                     </button>
                 ))}
             </div>
 
-            {/* Main Content Area */}
-            <div className="flex flex-1 overflow-hidden">
+            {/* 4. MAIN WORKSPACE: Sidebar + Editor */}
+            <div className="flex flex-1 overflow-hidden relative">
+                
                 {/* Sidebar Navigation */}
-                <div className="w-64 bg-[#23cba7] flex flex-col shrink-0 overflow-y-auto">
-                    {SIDEBAR_ITEMS.map(item => (
-                        <button
-                            key={item.id}
-                            onClick={() => setActiveSection(item.id)}
-                            className={`px-4 py-3 text-left text-sm font-medium border-b border-white/10 transition-colors flex items-center justify-between ${
-                                activeSection === item.id 
-                                ? 'bg-[#1b9e82] text-white shadow-inner border-l-4 border-l-white' 
-                                : 'text-white hover:bg-[#1b9e82]/50'
-                            }`}
-                        >
-                            {item.label}
-                            {activeSection === item.id && <ChevronRight className="w-4 h-4 opacity-75" />}
-                        </button>
-                    ))}
-                    {/* Checkbox Mimic */}
-                    <div className="mt-auto p-2">
-                        {['PUB', 'CON'].map(opt => (
-                            <div key={opt} className="flex items-center text-white text-xs mb-1 px-2">
-                                <input type="checkbox" className="mr-2" defaultChecked /> {opt}
-                            </div>
+                <div className="w-64 bg-slate-50 border-r border-slate-200 flex flex-col shrink-0">
+                    <div className="p-3 bg-slate-100 border-b border-slate-200">
+                        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Clinical Sections</h3>
+                    </div>
+                    <div className="flex-1 overflow-y-auto">
+                        {SIDEBAR_ITEMS.map((item) => (
+                            <button
+                                key={item.id}
+                                onClick={() => setActiveSection(item.id)}
+                                className={`w-full text-left px-4 py-3 text-xs font-medium border-b border-slate-100 flex items-center justify-between transition-colors
+                                    ${activeSection === item.id 
+                                        ? 'bg-white text-blue-700 border-l-4 border-l-blue-600 shadow-sm z-10' 
+                                        : 'text-slate-600 hover:bg-white hover:text-slate-900'
+                                    }`}
+                            >
+                                {item.label}
+                                {activeSection === item.id && <ChevronRight className="w-3.5 h-3.5" />}
+                            </button>
                         ))}
+                    </div>
+                    {/* Status Checkboxes */}
+                    <div className="p-4 bg-slate-100 border-t border-slate-200">
+                        <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer mb-2">
+                            <input type="checkbox" className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                            <span>Mark as Confidential</span>
+                        </label>
+                        <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+                            <input type="checkbox" className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                            <span>Share with Patient</span>
+                        </label>
                     </div>
                 </div>
 
                 {/* Editor Area */}
-                <div className="flex-1 bg-white flex flex-col min-w-0">
-                    {/* Section Header */}
-                    <div className="bg-[#006699] text-white px-4 py-2 text-sm font-bold flex justify-between items-center shadow-sm shrink-0">
-                        <span>{activeSection}</span>
-                        <ChevronDown className="w-4 h-4" />
+                <div className="flex-1 flex flex-col bg-white min-w-0">
+                    
+                    {/* Editor Header */}
+                    <div className="h-10 bg-slate-50 border-b border-slate-200 flex items-center justify-between px-4 shrink-0">
+                        <span className="font-bold text-slate-700 text-sm">{activeSection}</span>
+                        <div className="text-[10px] text-slate-400">
+                           {lastEdited ? `Last saved: ${lastEdited}` : 'Unsaved changes'}
+                        </div>
                     </div>
 
-                    {/* Editor Toolbar */}
-                    <div className="border-b border-slate-200 p-2 flex items-center gap-2 bg-slate-50 text-xs shrink-0 select-none">
-                        <div className="font-bold text-blue-800 flex items-center cursor-pointer hover:bg-slate-200 px-2 py-1 rounded">
-                            Select Field <ChevronDown className="w-3 h-3 ml-1" />
-                        </div>
-                        
-                        <div className="w-px h-5 bg-slate-300 mx-2"></div>
-                        
-                        <div className="flex items-center gap-1">
-                            <button 
-                                onClick={() => execCommand('bold')} 
-                                className="p-1.5 hover:bg-slate-200 rounded text-slate-600 transition-colors" 
-                                title="Bold (Ctrl+B)"
-                            >
-                                <Bold size={16} />
+                    {/* Formatting Toolbar */}
+                    <div className="p-2 border-b border-slate-200 flex items-center gap-1 shrink-0 bg-white">
+                        <div className="flex items-center bg-slate-100 rounded-lg p-0.5 border border-slate-200">
+                            <button onClick={() => execCommand('bold')} className="p-1.5 hover:bg-white hover:shadow-sm rounded text-slate-700 transition-all" title="Bold">
+                                <Bold className="w-3.5 h-3.5" />
                             </button>
-                            <button 
-                                onClick={() => execCommand('italic')} 
-                                className="p-1.5 hover:bg-slate-200 rounded text-slate-600 transition-colors" 
-                                title="Italic (Ctrl+I)"
-                            >
-                                <Italic size={16} />
+                            <button onClick={() => execCommand('italic')} className="p-1.5 hover:bg-white hover:shadow-sm rounded text-slate-700 transition-all" title="Italic">
+                                <Italic className="w-3.5 h-3.5" />
                             </button>
-                            <button 
-                                onClick={() => execCommand('underline')} 
-                                className="p-1.5 hover:bg-slate-200 rounded text-slate-600 transition-colors" 
-                                title="Underline (Ctrl+U)"
-                            >
-                                <Underline size={16} />
-                            </button>
-                            <button 
-                                onClick={() => execCommand('insertUnorderedList')} 
-                                className="p-1.5 hover:bg-slate-200 rounded text-slate-600 transition-colors" 
-                                title="Bullet List"
-                            >
-                                <List size={16} />
+                            <button onClick={() => execCommand('underline')} className="p-1.5 hover:bg-white hover:shadow-sm rounded text-slate-700 transition-all" title="Underline">
+                                <Underline className="w-3.5 h-3.5" />
                             </button>
                         </div>
-                        
-                        <div className="w-px h-5 bg-slate-300 mx-2"></div>
-                        
-                        <div className="flex-1 text-center font-bold text-slate-600">Description</div>
-                    </div>
-
-                    {/* Rich Text Editor Area */}
-                    <div 
-                        className="flex-1 p-4 overflow-auto bg-slate-50/30 cursor-text" 
-                        onClick={() => editorRef.current?.focus()}
-                    >
-                        <div
-                            ref={editorRef}
-                            contentEditable
-                            onInput={handleInput}
-                            className="w-full min-h-full border border-slate-300 rounded p-4 text-sm text-slate-800 leading-relaxed focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white shadow-inner prose prose-sm max-w-none"
-                            style={{ minHeight: '300px' }}
-                            data-placeholder={`Enter ${activeSection} here...`}
-                        />
-                    </div>
-
-                    {/* Editor Footer / Info */}
-                    <div className="px-4 py-2 text-[10px] text-slate-500 border-t border-slate-200 bg-white shrink-0 italic">
-                        {lastEdited ? (
-                            <span>Last Edited by Dr. {doctor?.firstName} {doctor?.lastName} on {lastEdited}</span>
-                        ) : (
-                            <span>Not edited yet</span>
-                        )}
-                    </div>
-
-                    {/* Template Controls */}
-                    <div className="p-3 bg-slate-100 border-t border-slate-200 flex items-center gap-2 shrink-0">
-                        <label className="text-xs font-bold text-slate-600">Templates:</label>
-                        <select className="border border-slate-300 rounded px-2 py-1 text-xs w-40 bg-white">
-                            <option>-- Select --</option>
-                            <option>Normal Visit</option>
-                            <option>Follow Up</option>
-                        </select>
-                        <input className="border border-slate-300 rounded px-2 py-1 text-xs w-40 bg-[#1e5c46] text-white placeholder-white/70" placeholder="Template Name" />
-                        <button className="bg-slate-300 text-slate-700 px-3 py-1 rounded text-xs font-bold border border-slate-400 hover:bg-slate-400">Save Template</button>
-                        <button className="bg-slate-300 text-slate-700 px-3 py-1 rounded text-xs font-bold border border-slate-400 hover:bg-slate-400">Clear & Reset</button>
-                        
-                        <div className="ml-auto flex gap-2">
-                            <button 
-                                onClick={handleSaveNote}
-                                className="bg-slate-400 text-white px-4 py-1 rounded text-xs font-bold hover:bg-slate-500 flex items-center shadow-sm"
-                            >
-                                <Save className="w-3 h-3 mr-1" /> Update
+                        <div className="w-px h-5 bg-slate-200 mx-1"></div>
+                        <div className="flex items-center bg-slate-100 rounded-lg p-0.5 border border-slate-200">
+                             <button onClick={() => execCommand('insertUnorderedList')} className="p-1.5 hover:bg-white hover:shadow-sm rounded text-slate-700 transition-all" title="Bullet List">
+                                <List className="w-3.5 h-3.5" />
+                            </button>
+                            <button className="p-1.5 hover:bg-white hover:shadow-sm rounded text-slate-700 transition-all" title="Align Left">
+                                <AlignLeft className="w-3.5 h-3.5" />
                             </button>
                         </div>
+                        <div className="w-px h-5 bg-slate-200 mx-1"></div>
+                         <button className="flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-xs font-medium text-slate-700 border border-slate-200 transition-colors">
+                             <Type className="w-3.5 h-3.5" /> Insert Template
+                         </button>
+                    </div>
+
+                    {/* Text Area */}
+                    <div className="flex-1 overflow-y-auto bg-slate-50/50 p-6 cursor-text" onClick={() => editorRef.current?.focus()}>
+                        <div className="max-w-4xl mx-auto bg-white min-h-[500px] shadow-sm border border-slate-200 rounded-sm p-8">
+                            <div
+                                ref={editorRef}
+                                contentEditable
+                                onInput={handleInput}
+                                className="w-full h-full outline-none text-sm text-slate-800 leading-relaxed whitespace-pre-wrap prose prose-sm prose-slate max-w-none empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400"
+                                data-placeholder="Start typing clinical notes here..."
+                            />
+                        </div>
+                    </div>
+
+                    {/* Bottom Save Bar for Section */}
+                    <div className="p-3 border-t border-slate-200 bg-white flex justify-between items-center shrink-0">
+                         <div className="flex items-center gap-2">
+                             <label className="text-xs text-slate-500 font-medium">Quick Template:</label>
+                             <select className="text-xs border border-slate-300 rounded px-2 py-1 bg-slate-50 outline-none focus:border-blue-500">
+                                 <option>Select...</option>
+                                 <option>Normal Examination</option>
+                                 <option>Follow-up Note</option>
+                             </select>
+                         </div>
+                         <button 
+                            onClick={handleSaveNote}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-xs font-bold shadow-sm flex items-center gap-2 transition-all"
+                         >
+                             <Save className="w-3.5 h-3.5" /> Save Section
+                         </button>
                     </div>
                 </div>
             </div>
 
-            {/* Bottom Actions */}
-            <div className="bg-[#22b9cd] p-2 flex justify-end gap-2 shrink-0 shadow-lg border-t border-white/20">
-                <button className="bg-[#17a2b8] hover:bg-[#138496] text-white px-4 py-1.5 rounded text-xs font-bold shadow transition-colors border border-white/20">Pharmacy</button>
-                <button className="bg-[#17a2b8] hover:bg-[#138496] text-white px-4 py-1.5 rounded text-xs font-bold shadow transition-colors border border-white/20">Print Orders</button>
-                <button 
-                    onClick={handleEndEncounter}
-                    className="bg-[#17a2b8] hover:bg-[#138496] text-white px-4 py-1.5 rounded text-xs font-bold shadow transition-colors border border-white/20"
-                >
-                    End Encounter
-                </button>
-                <button className="bg-[#17a2b8] hover:bg-[#138496] text-white px-4 py-1.5 rounded text-xs font-bold shadow transition-colors border border-white/20">Download As PDF</button>
-                <button 
-                    onClick={handleCancelEncounter}
-                    className="bg-[#17a2b8] hover:bg-[#138496] text-white px-4 py-1.5 rounded text-xs font-bold shadow transition-colors border border-white/20"
-                >
-                    Cancel Encounter
-                </button>
+            {/* 5. FOOTER: Global Actions */}
+            <div className="h-14 bg-slate-100 border-t border-slate-300 flex items-center justify-between px-6 shrink-0 z-20">
+                <div className="flex items-center gap-3">
+                    <button className="text-slate-600 hover:text-blue-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded hover:bg-white border border-transparent hover:border-slate-200 transition-all">
+                        <Printer className="w-4 h-4" /> Print Rx
+                    </button>
+                    <button className="text-slate-600 hover:text-blue-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded hover:bg-white border border-transparent hover:border-slate-200 transition-all">
+                        <Download className="w-4 h-4" /> Download PDF
+                    </button>
+                </div>
+
+                <div className="flex items-center gap-3">
+                    <button 
+                        onClick={handleCancelEncounter}
+                        className="text-slate-600 hover:text-red-600 text-xs font-bold flex items-center gap-1 px-4 py-2 rounded hover:bg-red-50 border border-transparent transition-all"
+                    >
+                        <XCircle className="w-4 h-4" /> Cancel
+                    </button>
+                    <button 
+                        onClick={handleEndEncounter}
+                        className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-6 py-2.5 rounded shadow-sm hover:shadow-md flex items-center gap-2 transition-all transform active:scale-95"
+                    >
+                        <Stethoscope className="w-4 h-4" /> Complete & End Encounter
+                    </button>
+                </div>
             </div>
+
         </div>
     );
 };

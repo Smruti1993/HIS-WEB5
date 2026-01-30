@@ -186,7 +186,6 @@ export const Appointments = () => {
         return;
     }
 
-    const dateObj = new Date(selectedDate);
     const [y, m, d] = selectedDate.split('-').map(Number);
     const localDate = new Date(y, m - 1, d); 
     const dayIndex = localDate.getDay();
@@ -226,9 +225,11 @@ export const Appointments = () => {
   const handleBooking = () => {
     if (!selectedSlot || !selectedPatient) return;
     
-    // Auto-check-in if the appointment is for today
-    const today = new Date().toISOString().split('T')[0];
-    const isToday = selectedDate === today;
+    // Auto-check-in if the appointment is for today (Local Time comparison)
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const isToday = selectedDate === todayStr;
+
     const status = isToday ? 'Checked-In' : 'Scheduled';
     const checkInTime = isToday ? new Date().toISOString() : undefined;
 
@@ -252,7 +253,9 @@ export const Appointments = () => {
           time: selectedSlot,
           status: status,
           checkInTime: checkInTime,
-          symptoms: symptoms
+          symptoms: symptoms,
+          visitType: 'New Visit',
+          paymentMode: 'CASH'
       });
       // Reset
       setSelectedSlot('');

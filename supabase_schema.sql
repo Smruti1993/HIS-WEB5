@@ -1,4 +1,14 @@
 -- ==========================================
+-- MIGRATION COMMANDS (Run these if tables already exist)
+-- ==========================================
+
+-- Fix for Appointments table missing columns
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS check_in_time TIMESTAMP WITH TIME ZONE;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS check_out_time TIMESTAMP WITH TIME ZONE;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS visit_type TEXT DEFAULT 'New Visit';
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS payment_mode TEXT DEFAULT 'CASH';
+
+-- ==========================================
 -- 1. Master Data Tables
 -- ==========================================
 
@@ -155,13 +165,27 @@ CREATE TABLE IF NOT EXISTS clinical_notes (
     id TEXT PRIMARY KEY,
     appointment_id TEXT REFERENCES appointments(id) ON DELETE CASCADE,
     note_type TEXT NOT NULL, -- 'Chief Complaint', 'Past History', 'Family History', 'Treatment Plan', etc.
-    description TEXT,
+    description TEXT, -- Stores HTML content from Rich Text Editor
     recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE
 );
 
 -- ==========================================
--- 6. Security (Row Level Security)
+-- 6. Performance Indexes
+-- ==========================================
+
+CREATE INDEX IF NOT EXISTS idx_appointments_patient ON appointments(patient_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_doctor ON appointments(doctor_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(date);
+CREATE INDEX IF NOT EXISTS idx_bills_patient ON bills(patient_id);
+CREATE INDEX IF NOT EXISTS idx_clinical_notes_appt ON clinical_notes(appointment_id);
+CREATE INDEX IF NOT EXISTS idx_clinical_vitals_appt ON clinical_vitals(appointment_id);
+CREATE INDEX IF NOT EXISTS idx_clinical_diagnoses_appt ON clinical_diagnoses(appointment_id);
+CREATE INDEX IF NOT EXISTS idx_patients_name ON patients(last_name);
+CREATE INDEX IF NOT EXISTS idx_employees_dept ON employees(department_id);
+
+-- ==========================================
+-- 7. Security (Row Level Security)
 -- ==========================================
 
 ALTER TABLE departments ENABLE ROW LEVEL SECURITY;
