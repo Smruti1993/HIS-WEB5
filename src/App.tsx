@@ -10,6 +10,8 @@ import { Availability } from './pages/Availability';
 import { Masters } from './pages/Masters';
 import { Connection } from './pages/Connection';
 import { Billing } from './pages/Billing';
+import { DoctorWorkbench } from './pages/DoctorWorkbench';
+import { Consultation } from './pages/Consultation';
 
 const App = () => {
   return (
@@ -21,6 +23,8 @@ const App = () => {
             <Route path="appointments" element={<Appointments />} />
             <Route path="patients" element={<Patients />} />
             <Route path="billing" element={<Billing />} />
+            <Route path="doctor-workbench" element={<DoctorWorkbench />} />
+            <Route path="consultation/:appointmentId" element={<Consultation />} />
             <Route path="employees" element={<Employees />} />
             <Route path="availability" element={<Availability />} />
             <Route path="masters" element={<Masters />} />

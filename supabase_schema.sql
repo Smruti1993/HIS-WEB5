@@ -1,4 +1,7 @@
--- 1. Master Tables
+-- ==========================================
+-- 1. Master Data Tables
+-- ==========================================
+
 CREATE TABLE IF NOT EXISTS departments (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -20,7 +23,10 @@ CREATE TABLE IF NOT EXISTS service_centres (
     status TEXT DEFAULT 'Active'
 );
 
--- 2. Employees Table
+-- ==========================================
+-- 2. Staff & Patients
+-- ==========================================
+
 CREATE TABLE IF NOT EXISTS employees (
     id TEXT PRIMARY KEY,
     first_name TEXT NOT NULL,
@@ -33,7 +39,6 @@ CREATE TABLE IF NOT EXISTS employees (
     status TEXT DEFAULT 'Active'
 );
 
--- 3. Patients Table
 CREATE TABLE IF NOT EXISTS patients (
     id TEXT PRIMARY KEY,
     first_name TEXT NOT NULL,
@@ -46,7 +51,6 @@ CREATE TABLE IF NOT EXISTS patients (
     registration_date TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 4. Doctor Availability Table
 CREATE TABLE IF NOT EXISTS doctor_availability (
     id TEXT PRIMARY KEY,
     doctor_id TEXT REFERENCES employees(id) ON DELETE CASCADE,
@@ -56,7 +60,10 @@ CREATE TABLE IF NOT EXISTS doctor_availability (
     slot_duration_minutes INTEGER DEFAULT 30
 );
 
--- 5. Appointments Table
+-- ==========================================
+-- 3. Appointments
+-- ==========================================
+
 CREATE TABLE IF NOT EXISTS appointments (
     id TEXT PRIMARY KEY,
     patient_id TEXT REFERENCES patients(id) ON DELETE CASCADE,
@@ -64,13 +71,19 @@ CREATE TABLE IF NOT EXISTS appointments (
     department_id TEXT REFERENCES departments(id) ON DELETE SET NULL,
     date TEXT NOT NULL, -- Format 'YYYY-MM-DD'
     time TEXT NOT NULL, -- Format 'HH:mm'
-    status TEXT DEFAULT 'Scheduled', -- 'Scheduled', 'Completed', 'Cancelled'
+    status TEXT DEFAULT 'Scheduled', -- 'Scheduled', 'Checked-In', 'In-Consultation', 'Completed', 'Cancelled'
+    visit_type TEXT DEFAULT 'New Visit', -- 'New Visit', 'Follow-up'
+    payment_mode TEXT DEFAULT 'CASH',
     symptoms TEXT,
     notes TEXT,
+    check_in_time TIMESTAMP WITH TIME ZONE,
+    check_out_time TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 6. Billing Tables
+-- ==========================================
+-- 4. Billing & Finance
+-- ==========================================
 
 CREATE TABLE IF NOT EXISTS bills (
     id TEXT PRIMARY KEY,
@@ -100,8 +113,57 @@ CREATE TABLE IF NOT EXISTS payments (
     reference TEXT
 );
 
+-- ==========================================
+-- 5. Clinical Data (Workbench & Consultation)
+-- ==========================================
 
--- 7. Enable Row Level Security (RLS)
+CREATE TABLE IF NOT EXISTS clinical_vitals (
+    id TEXT PRIMARY KEY,
+    appointment_id TEXT REFERENCES appointments(id) ON DELETE CASCADE,
+    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    bp_systolic INTEGER,
+    bp_diastolic INTEGER,
+    temperature NUMERIC(4, 1),
+    pulse INTEGER,
+    respiratory_rate INTEGER,
+    weight NUMERIC(5, 2),
+    height NUMERIC(5, 2),
+    bmi NUMERIC(4, 1),
+    spo2 INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS clinical_diagnoses (
+    id TEXT PRIMARY KEY,
+    appointment_id TEXT REFERENCES appointments(id) ON DELETE CASCADE,
+    code TEXT, -- ICD Code or similar
+    description TEXT NOT NULL,
+    type TEXT DEFAULT 'Provisional', -- 'Provisional', 'Final'
+    added_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS clinical_allergies (
+    id TEXT PRIMARY KEY,
+    patient_id TEXT REFERENCES patients(id) ON DELETE CASCADE,
+    allergen TEXT NOT NULL,
+    severity TEXT, -- 'Mild', 'Moderate', 'Severe'
+    reaction TEXT,
+    status TEXT DEFAULT 'Active',
+    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS clinical_notes (
+    id TEXT PRIMARY KEY,
+    appointment_id TEXT REFERENCES appointments(id) ON DELETE CASCADE,
+    note_type TEXT NOT NULL, -- 'Chief Complaint', 'Past History', 'Family History', 'Treatment Plan', etc.
+    description TEXT,
+    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE
+);
+
+-- ==========================================
+-- 6. Security (Row Level Security)
+-- ==========================================
+
 ALTER TABLE departments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE units ENABLE ROW LEVEL SECURITY;
 ALTER TABLE service_centres ENABLE ROW LEVEL SECURITY;
@@ -112,12 +174,12 @@ ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bills ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bill_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clinical_vitals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clinical_diagnoses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clinical_allergies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clinical_notes ENABLE ROW LEVEL SECURITY;
 
-
--- 8. Create Policies
--- Note: For this demo application using a simple Anon Key without user Auth,
--- we allow public access. In a production app, you would restrict this to authenticated users.
-
+-- Create open policies for development (Allows full access to anyone with the API key)
 CREATE POLICY "Enable all access for all users" ON departments FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON units FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON service_centres FOR ALL USING (true) WITH CHECK (true);
@@ -128,3 +190,7 @@ CREATE POLICY "Enable all access for all users" ON appointments FOR ALL USING (t
 CREATE POLICY "Enable all access for all users" ON bills FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON bill_items FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON payments FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for all users" ON clinical_vitals FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for all users" ON clinical_diagnoses FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for all users" ON clinical_allergies FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for all users" ON clinical_notes FOR ALL USING (true) WITH CHECK (true);

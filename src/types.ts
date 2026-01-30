@@ -58,9 +58,13 @@ export interface Appointment {
   departmentId: string;
   date: string; // YYYY-MM-DD
   time: string; // HH:mm
-  status: 'Scheduled' | 'Completed' | 'Cancelled';
+  status: 'Scheduled' | 'Checked-In' | 'In-Consultation' | 'Completed' | 'Cancelled';
+  visitType?: 'New Visit' | 'Follow-up';
+  paymentMode?: string;
   symptoms?: string;
   notes?: string;
+  checkInTime?: string;
+  checkOutTime?: string;
 }
 
 // --- Billing Types ---
@@ -91,6 +95,49 @@ export interface Bill {
   paidAmount: number;
   items: BillItem[];
   payments: Payment[];
+}
+
+// --- Clinical / Workbench Types ---
+
+export interface VitalSign {
+  id: string;
+  appointmentId: string;
+  recordedAt: string;
+  bpSystolic?: number;
+  bpDiastolic?: number;
+  temperature?: number;
+  pulse?: number;
+  respiratoryRate?: number;
+  weight?: number;
+  height?: number;
+  bmi?: number;
+  spo2?: number;
+}
+
+export interface Diagnosis {
+  id: string;
+  appointmentId: string;
+  code?: string;
+  description: string;
+  type: 'Provisional' | 'Final';
+  addedAt: string;
+}
+
+export interface ClinicalNote {
+  id: string;
+  appointmentId: string;
+  noteType: string; // 'Chief Complaint', 'Past History', etc.
+  description: string;
+  recordedAt: string;
+}
+
+export interface Allergy {
+  id: string;
+  patientId: string;
+  allergen: string;
+  severity: string;
+  reaction?: string;
+  status: 'Active' | 'Resolved';
 }
 
 export interface ToastMessage {

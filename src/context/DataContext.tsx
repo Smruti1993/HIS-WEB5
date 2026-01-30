@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { 
   Patient, Employee, Department, Unit, ServiceCentre, 
-  DoctorAvailability, Appointment, ToastMessage, Bill, BillItem, Payment 
+  DoctorAvailability, Appointment, ToastMessage, Bill, BillItem, Payment,
+  VitalSign, Diagnosis, ClinicalNote, Allergy
 } from '../types';
 import { 
     getSupabase, 
@@ -40,6 +41,14 @@ interface DataContextType {
   bills: Bill[];
   createBill: (bill: Bill) => void;
   addPayment: (payment: Payment, billId: string) => void;
+
+  vitals: VitalSign[];
+  diagnoses: Diagnosis[];
+  clinicalNotes: ClinicalNote[];
+  allergies: Allergy[];
+  saveVitalSign: (vital: VitalSign) => void;
+  saveDiagnosis: (diagnosis: Diagnosis) => void;
+  saveClinicalNote: (note: ClinicalNote) => void;
   
   toasts: ToastMessage[];
   showToast: (type: 'success' | 'error' | 'info', message: string) => void;
@@ -62,6 +71,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [availabilities, setAvailabilities] = useState<DoctorAvailability[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
+  const [vitals, setVitals] = useState<VitalSign[]>([]);
+  const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([]);
+  const [clinicalNotes, setClinicalNotes] = useState<ClinicalNote[]>([]);
+  const [allergies, setAllergies] = useState<Allergy[]>([]);
+
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDbConnected, setIsDbConnected] = useState(checkConfigured());
@@ -99,11 +113,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const mapAptFromDb = (a: any): Appointment => ({
     id: a.id, patientId: a.patient_id, doctorId: a.doctor_id, departmentId: a.department_id,
-    date: a.date, time: a.time, status: a.status, symptoms: a.symptoms, notes: a.notes
+    date: a.date, time: a.time, status: a.status, symptoms: a.symptoms, notes: a.notes,
+    visitType: a.visit_type, paymentMode: a.payment_mode, checkInTime: a.check_in_time, checkOutTime: a.check_out_time
   });
   const mapAptToDb = (a: any) => ({
     id: a.id, patient_id: a.patientId, doctor_id: a.doctorId, department_id: a.departmentId,
-    date: a.date, time: a.time, status: a.status, symptoms: a.symptoms, notes: a.notes
+    date: a.date, time: a.time, status: a.status, symptoms: a.symptoms, notes: a.notes,
+    visit_type: a.visitType, payment_mode: a.paymentMode, check_in_time: a.checkInTime, check_out_time: a.checkOutTime
   });
 
   const mapBillFromDb = (b: any, items: any[], payments: any[]): Bill => ({
@@ -111,6 +127,39 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     status: b.status, totalAmount: b.total_amount, paidAmount: b.paid_amount,
     items: items.map(i => ({ id: i.id, description: i.description, quantity: i.quantity, unitPrice: i.unit_price, total: i.total })),
     payments: payments.map(p => ({ id: p.id, date: p.date, amount: p.amount, method: p.method, reference: p.reference }))
+  });
+
+  const mapVitalFromDb = (v: any): VitalSign => ({
+    id: v.id, appointmentId: v.appointment_id, recordedAt: v.recorded_at,
+    bpSystolic: v.bp_systolic, bpDiastolic: v.bp_diastolic, temperature: v.temperature,
+    pulse: v.pulse, respiratoryRate: v.respiratory_rate, weight: v.weight, height: v.height,
+    bmi: v.bmi, spo2: v.spo2
+  });
+  const mapVitalToDb = (v: any) => ({
+    id: v.id, appointment_id: v.appointmentId, recorded_at: v.recordedAt,
+    bp_systolic: v.bpSystolic, bp_diastolic: v.bpDiastolic, temperature: v.temperature,
+    pulse: v.pulse, respiratory_rate: v.respiratoryRate, weight: v.weight, height: v.height,
+    bmi: v.bmi, spo2: v.spo2
+  });
+
+  const mapDiagnosisFromDb = (d: any): Diagnosis => ({
+    id: d.id, appointmentId: d.appointment_id, code: d.code, description: d.description,
+    type: d.type, addedAt: d.added_at
+  });
+  const mapDiagnosisToDb = (d: any) => ({
+    id: d.id, appointment_id: d.appointmentId, code: d.code, description: d.description,
+    type: d.type, added_at: d.addedAt
+  });
+
+  const mapNoteFromDb = (n: any): ClinicalNote => ({
+    id: n.id, appointmentId: n.appointment_id, noteType: n.note_type, description: n.description, recordedAt: n.recorded_at
+  });
+  const mapNoteToDb = (n: any) => ({
+    id: n.id, appointment_id: n.appointmentId, note_type: n.noteType, description: n.description, recorded_at: n.recordedAt
+  });
+
+  const mapAllergyFromDb = (a: any): Allergy => ({
+    id: a.id, patientId: a.patient_id, allergen: a.allergen, severity: a.severity, reaction: a.reaction, status: a.status
   });
 
   // --- Initial Fetch ---
@@ -130,7 +179,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const supabase = getSupabase();
 
       try {
-        const [pRes, eRes, dRes, uRes, sRes, avRes, apRes, bRes, biRes, payRes] = await Promise.all([
+        const [pRes, eRes, dRes, uRes, sRes, avRes, apRes, bRes, biRes, payRes, vRes, diRes, notRes, alRes] = await Promise.all([
           supabase.from('patients').select('*'),
           supabase.from('employees').select('*'),
           supabase.from('departments').select('*'),
@@ -141,6 +190,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           supabase.from('bills').select('*'),
           supabase.from('bill_items').select('*'),
           supabase.from('payments').select('*'),
+          supabase.from('clinical_vitals').select('*'),
+          supabase.from('clinical_diagnoses').select('*'),
+          supabase.from('clinical_notes').select('*'),
+          supabase.from('clinical_allergies').select('*'),
         ]);
 
         if (pRes.error) throw pRes.error;
@@ -152,6 +205,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (sRes.data) setServiceCentres(sRes.data.map(mapDeptFromDb));
         if (avRes.data) setAvailabilities(avRes.data.map(mapAvailFromDb));
         if (apRes.data) setAppointments(apRes.data.map(mapAptFromDb));
+        if (vRes.data) setVitals(vRes.data.map(mapVitalFromDb));
+        if (diRes.data) setDiagnoses(diRes.data.map(mapDiagnosisFromDb));
+        if (notRes.data) setClinicalNotes(notRes.data.map(mapNoteFromDb));
+        if (alRes.data) setAllergies(alRes.data.map(mapAllergyFromDb));
 
         if (bRes.data) {
             const rawBills = bRes.data;
@@ -205,7 +262,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const disconnectDb = () => {
       clearCredentialsFromStorage();
       setIsDbConnected(false);
-      setPatients([]); setEmployees([]); setDepartments([]); setAppointments([]); setAvailabilities([]); setBills([]);
+      setPatients([]); setEmployees([]); setDepartments([]); setAppointments([]); setAvailabilities([]); setBills([]); setVitals([]); setDiagnoses([]); setClinicalNotes([]); setAllergies([]);
       showToast('info', 'Disconnected from database.');
   };
 
@@ -231,7 +288,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const original = patients.find(p => p.id === id);
     setPatients(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
     const dbData: any = {};
-    // ... populate fields
     if (data.firstName) dbData.first_name = data.firstName;
     if (data.lastName) dbData.last_name = data.lastName;
     if (data.dob) dbData.dob = data.dob;
@@ -343,95 +399,77 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const createBill = async (bill: Bill) => {
       if (!requireDb()) return;
-      
       setBills(prev => [...prev, bill]);
-
-      // 1. Insert Bill Header
       const { error: billError } = await getSupabase().from('bills').insert({
-          id: bill.id,
-          patient_id: bill.patientId,
-          appointment_id: bill.appointmentId,
-          date: bill.date,
-          status: bill.status,
-          total_amount: bill.totalAmount,
-          paid_amount: bill.paidAmount
+          id: bill.id, patient_id: bill.patientId, appointment_id: bill.appointmentId, date: bill.date,
+          status: bill.status, total_amount: bill.totalAmount, paid_amount: bill.paidAmount
       });
 
-      if (billError) {
-          showToast('error', 'Failed to create bill header: ' + billError.message);
-          setBills(prev => prev.filter(b => b.id !== bill.id));
-          return;
-      }
+      if (billError) { showToast('error', 'Failed to create bill: ' + billError.message); setBills(prev => prev.filter(b => b.id !== bill.id)); return; }
 
-      // 2. Insert Items
-      const itemsDb = bill.items.map(i => ({
-          id: i.id,
-          bill_id: bill.id,
-          description: i.description,
-          quantity: i.quantity,
-          unit_price: i.unitPrice,
-          total: i.total
-      }));
-
+      const itemsDb = bill.items.map(i => ({ id: i.id, bill_id: bill.id, description: i.description, quantity: i.quantity, unit_price: i.unitPrice, total: i.total }));
       const { error: itemsError } = await getSupabase().from('bill_items').insert(itemsDb);
-      
-      if (itemsError) {
-          showToast('error', 'Failed to save bill items: ' + itemsError.message);
-          // Potential rollback logic here
-      } else {
-          showToast('success', 'Invoice generated successfully.');
-      }
+      if (itemsError) showToast('error', 'Failed to save bill items.'); else showToast('success', 'Invoice generated.');
   };
 
   const addPayment = async (payment: Payment, billId: string) => {
       if (!requireDb()) return;
-
-      // Update Local State
       setBills(prev => prev.map(b => {
           if (b.id !== billId) return b;
-          
           const newPaidAmount = Number(b.paidAmount) + Number(payment.amount);
           let newStatus: 'Unpaid' | 'Partial' | 'Paid' = 'Partial';
           if (newPaidAmount >= b.totalAmount) newStatus = 'Paid';
-          
-          return {
-              ...b,
-              paidAmount: newPaidAmount,
-              status: newStatus,
-              payments: [...b.payments, payment]
-          };
+          return { ...b, paidAmount: newPaidAmount, status: newStatus, payments: [...b.payments, payment] };
       }));
-
-      // Update DB - Insert Payment
       const { error: payError } = await getSupabase().from('payments').insert({
-          id: payment.id,
-          bill_id: billId,
-          date: payment.date,
-          amount: payment.amount,
-          method: payment.method,
-          reference: payment.reference
+          id: payment.id, bill_id: billId, date: payment.date, amount: payment.amount, method: payment.method, reference: payment.reference
       });
-
-      if (payError) {
-           showToast('error', 'Failed to record payment transaction.');
-           return;
-      }
-
-      // Update DB - Update Bill Status/Totals
-      // We calculate specifically to ensure DB consistency
+      if (payError) { showToast('error', 'Failed to record payment.'); return; }
+      
       const bill = bills.find(b => b.id === billId);
       if (bill) {
           const newTotalPaid = Number(bill.paidAmount) + Number(payment.amount);
           let newStatus = 'Partial';
           if (newTotalPaid >= bill.totalAmount) newStatus = 'Paid';
-
-          await getSupabase().from('bills').update({
-              paid_amount: newTotalPaid,
-              status: newStatus
-          }).eq('id', billId);
+          await getSupabase().from('bills').update({ paid_amount: newTotalPaid, status: newStatus }).eq('id', billId);
       }
-      
       showToast('success', 'Payment recorded.');
+  };
+
+  // --- CLINICAL LOGIC ---
+
+  const saveVitalSign = async (vital: VitalSign) => {
+      if (!requireDb()) return;
+      setVitals(prev => [...prev, vital]);
+      const { error } = await getSupabase().from('clinical_vitals').insert(mapVitalToDb(vital));
+      if (error) { showToast('error', 'Failed to save vitals'); setVitals(prev => prev.filter(v => v.id !== vital.id)); }
+      else showToast('success', 'Vitals captured.');
+  };
+
+  const saveDiagnosis = async (diagnosis: Diagnosis) => {
+      if (!requireDb()) return;
+      setDiagnoses(prev => [...prev, diagnosis]);
+      const { error } = await getSupabase().from('clinical_diagnoses').insert(mapDiagnosisToDb(diagnosis));
+      if (error) { showToast('error', 'Failed to save diagnosis'); setDiagnoses(prev => prev.filter(d => d.id !== diagnosis.id)); }
+      else showToast('success', 'Diagnosis added.');
+  };
+
+  const saveClinicalNote = async (note: ClinicalNote) => {
+      if (!requireDb()) return;
+      
+      // Update local state if exists, else add
+      setClinicalNotes(prev => {
+          const existing = prev.find(n => n.appointmentId === note.appointmentId && n.noteType === note.noteType);
+          if (existing) {
+              return prev.map(n => n.id === existing.id ? note : n);
+          }
+          return [...prev, note];
+      });
+
+      // Upsert to DB
+      const { error } = await getSupabase().from('clinical_notes').upsert(mapNoteToDb(note));
+      if (error) showToast('error', 'Failed to save note.');
+      else showToast('success', 'Note saved.');
   };
 
   return (
@@ -444,6 +482,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       availabilities, saveAvailability, deleteAvailability,
       appointments, bookAppointment, updateAppointment, cancelAppointment,
       bills, createBill, addPayment,
+      vitals, diagnoses, clinicalNotes, allergies, saveVitalSign, saveDiagnosis, saveClinicalNote,
       toasts, showToast, removeToast,
       isLoading, isDbConnected, updateDbConnection, disconnectDb
     }}>

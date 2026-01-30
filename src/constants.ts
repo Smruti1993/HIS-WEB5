@@ -1,4 +1,4 @@
-import { Home, Users, Calendar, Settings, Clock, Activity, Database, CreditCard } from 'lucide-react';
+import { Home, Users, Calendar, Settings, Clock, Activity, Database, CreditCard, Stethoscope } from 'lucide-react';
 
 export const APP_NAME = "MediCore HMS";
 
@@ -6,15 +6,26 @@ export const DAYS_OF_WEEK = [
   'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 ];
 
-export const NAV_ITEMS = [
-  { label: 'Dashboard', path: '/', icon: Home },
-  { label: 'Appointments', path: '/appointments', icon: Calendar },
-  { label: 'Patients', path: '/patients', icon: Users },
-  { label: 'Billing', path: '/billing', icon: CreditCard },
-  { label: 'Doctors & Staff', path: '/employees', icon: Activity },
-  { label: 'Availability', path: '/availability', icon: Clock },
-  { label: 'Masters', path: '/masters', icon: Settings },
-  { label: 'Connection', path: '/connection', icon: Database },
+export interface NavItem {
+  label: string;
+  path: string;
+  icon: any;
+  category?: string; // Optional grouping
+}
+
+export const NAV_ITEMS: NavItem[] = [
+  { label: 'Dashboard', path: '/', icon: Home, category: 'Main' },
+  { label: 'Appointments', path: '/appointments', icon: Calendar, category: 'Main' },
+  { label: 'Patients', path: '/patients', icon: Users, category: 'Main' },
+  { label: 'Billing', path: '/billing', icon: CreditCard, category: 'Main' },
+  
+  // Patient Care Section
+  { label: 'Doctor Workbench', path: '/doctor-workbench', icon: Stethoscope, category: 'Patient Care' },
+
+  { label: 'Doctors & Staff', path: '/employees', icon: Activity, category: 'Administration' },
+  { label: 'Availability', path: '/availability', icon: Clock, category: 'Administration' },
+  { label: 'Masters', path: '/masters', icon: Settings, category: 'Administration' },
+  { label: 'Connection', path: '/connection', icon: Database, category: 'System' },
 ];
 
 export const MOCK_DEPARTMENTS = [
