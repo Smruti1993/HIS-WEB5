@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import { analyzeSymptoms } from '../services/geminiService';
 import { DatePicker } from '../components/DatePicker';
-import { Sparkles, Loader2, Calendar, Clock, AlertCircle, Filter, RefreshCw, XCircle, AlertTriangle, Printer, Pencil, CheckCircle, Stethoscope } from 'lucide-react';
+import { Sparkles, Loader2, Calendar, Clock, AlertCircle, Filter, RefreshCw, XCircle, AlertTriangle, Printer, Pencil, CheckCircle, Stethoscope, UserCheck } from 'lucide-react';
 import { Appointment } from '../types';
 
 export const Appointments = () => {
   const { 
     departments, employees, availabilities, appointments, 
-    bookAppointment, updateAppointment, cancelAppointment, patients 
+    bookAppointment, updateAppointment, cancelAppointment, patients, showToast 
   } = useData();
 
   // --- Booking/Edit State ---
@@ -226,6 +226,12 @@ export const Appointments = () => {
   const handleBooking = () => {
     if (!selectedSlot || !selectedPatient) return;
     
+    // Auto-check-in if the appointment is for today
+    const today = new Date().toISOString().split('T')[0];
+    const isToday = selectedDate === today;
+    const status = isToday ? 'Checked-In' : 'Scheduled';
+    const checkInTime = isToday ? new Date().toISOString() : undefined;
+
     if (editingId) {
       updateAppointment(editingId, {
         patientId: selectedPatient,
@@ -244,7 +250,8 @@ export const Appointments = () => {
           departmentId: selectedDept,
           date: selectedDate,
           time: selectedSlot,
-          status: 'Scheduled',
+          status: status,
+          checkInTime: checkInTime,
           symptoms: symptoms
       });
       // Reset
@@ -252,6 +259,14 @@ export const Appointments = () => {
       setAiAnalysis(null);
       setSymptoms('');
     }
+  };
+
+  const handleCheckIn = (id: string) => {
+    updateAppointment(id, { 
+        status: 'Checked-In',
+        checkInTime: new Date().toISOString()
+    });
+    showToast('success', 'Patient checked in successfully');
   };
 
   const handleEditClick = (apt: Appointment) => {
@@ -555,6 +570,7 @@ export const Appointments = () => {
                >
                    <option value="All">All Status</option>
                    <option value="Scheduled">Scheduled</option>
+                   <option value="Checked-In">Checked-In</option>
                    <option value="Completed">Completed</option>
                    <option value="Cancelled">Cancelled</option>
                </select>
@@ -621,11 +637,15 @@ export const Appointments = () => {
                                     <td className="px-6 py-4">
                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                             apt.status === 'Scheduled' ? 'bg-blue-100 text-blue-800' :
+                                            apt.status === 'Checked-In' ? 'bg-purple-100 text-purple-800' :
+                                            apt.status === 'In-Consultation' ? 'bg-amber-100 text-amber-800' :
                                             apt.status === 'Completed' ? 'bg-green-100 text-green-800' :
                                             'bg-red-100 text-red-800'
                                         }`}>
                                             <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
                                                  apt.status === 'Scheduled' ? 'bg-blue-600' :
+                                                 apt.status === 'Checked-In' ? 'bg-purple-600' :
+                                                 apt.status === 'In-Consultation' ? 'bg-amber-600' :
                                                  apt.status === 'Completed' ? 'bg-green-600' :
                                                  'bg-red-600'
                                             }`}></span>
@@ -639,6 +659,13 @@ export const Appointments = () => {
                                         <div className="flex justify-end gap-2">
                                             {apt.status === 'Scheduled' && (
                                                 <>
+                                                  <button 
+                                                      onClick={() => handleCheckIn(apt.id)}
+                                                      className="text-slate-400 hover:text-purple-600 hover:bg-purple-50 p-1.5 rounded-lg transition-colors"
+                                                      title="Check In Patient"
+                                                  >
+                                                      <UserCheck className="w-4 h-4" /> 
+                                                  </button>
                                                   <button 
                                                       onClick={() => handleCompleteClick(apt)}
                                                       className="text-slate-400 hover:text-green-600 hover:bg-green-50 p-1.5 rounded-lg transition-colors"
@@ -661,6 +688,14 @@ export const Appointments = () => {
                                                       <XCircle className="w-4 h-4" />
                                                   </button>
                                                 </>
+                                            )}
+                                            {apt.status === 'Checked-In' && (
+                                                <button 
+                                                    onClick={() => handleCompleteClick(apt)}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
+                                                >
+                                                    Start/Complete
+                                                </button>
                                             )}
                                             {apt.status === 'Completed' && (
                                                 <button 
