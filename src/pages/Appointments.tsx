@@ -202,13 +202,23 @@ export const Appointments = () => {
     }
 
     const slots: string[] = [];
-    let current = new Date(`${selectedDate}T${availability.startTime}`);
-    const end = new Date(`${selectedDate}T${availability.endTime}`);
+    
+    // Parse times
+    const [startH, startM] = availability.startTime.split(':').map(Number);
+    const [endH, endM] = availability.endTime.split(':').map(Number);
+    
+    let current = new Date(y, m - 1, d, startH, startM);
+    const end = new Date(y, m - 1, d, endH, endM);
+    
     const duration = availability.slotDurationMinutes;
+    const now = new Date();
 
     while (current < end) {
         const timeStr = current.toTimeString().substring(0, 5);
         
+        // Check if slot is in the past (only relevant if selectedDate is today or earlier)
+        const isPast = current < now;
+
         // Check collision
         // When editing, exclude the current appointment from collision checks (editingId)
         const isBooked = appointments.some(a => 
@@ -219,7 +229,7 @@ export const Appointments = () => {
             a.id !== editingId 
         );
 
-        if (!isBooked) slots.push(timeStr);
+        if (!isBooked && !isPast) slots.push(timeStr);
         current.setMinutes(current.getMinutes() + duration);
     }
 
@@ -492,7 +502,7 @@ export const Appointments = () => {
                   ) : availableSlots.length === 0 ? (
                       <div className="h-full flex flex-col items-center justify-center text-orange-400">
                           <AlertCircle className="w-12 h-12 mb-4 opacity-50" />
-                          <p>No slots available for this date.</p>
+                          <p>No slots available for this date (or all slots have passed).</p>
                       </div>
                   ) : (
                       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
