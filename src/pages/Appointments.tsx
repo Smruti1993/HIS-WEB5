@@ -38,6 +38,10 @@ export const Appointments = () => {
   const [appointmentToComplete, setAppointmentToComplete] = useState<Appointment | null>(null);
   const [clinicalNotes, setClinicalNotes] = useState('');
 
+  // Get local date string for minDate (Today)
+  const today = new Date();
+  const minDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
   // --- Handlers ---
   const handleAiTriage = async () => {
     if (!symptoms) return;
@@ -449,7 +453,7 @@ export const Appointments = () => {
                           label="Date"
                           value={selectedDate}
                           onChange={setSelectedDate}
-                          minDate={new Date().toISOString().split('T')[0]}
+                          minDate={minDateStr}
                           placeholder="Select appointment date"
                       />
                   </div>
