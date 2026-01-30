@@ -21,6 +21,7 @@ export const Appointments = () => {
   const [selectedDoctor, setSelectedDoctor] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedPatient, setSelectedPatient] = useState('');
+  const [visitType, setVisitType] = useState<'New Visit' | 'Follow-up'>('New Visit');
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [selectedSlot, setSelectedSlot] = useState('');
 
@@ -147,7 +148,7 @@ export const Appointments = () => {
              </div>
              <div>
                <div class="label">Type</div>
-               <div class="value">Consultation</div>
+               <div class="value">${apt.visitType || 'Consultation'}</div>
              </div>
           </div>
         </div>
@@ -254,7 +255,8 @@ export const Appointments = () => {
         departmentId: selectedDept,
         date: selectedDate,
         time: selectedSlot,
-        symptoms: symptoms
+        symptoms: symptoms,
+        visitType: visitType
       });
       cancelEdit(); // Reset form
     } else {
@@ -268,13 +270,14 @@ export const Appointments = () => {
           status: status,
           checkInTime: checkInTime,
           symptoms: symptoms,
-          visitType: 'New Visit',
+          visitType: visitType,
           paymentMode: 'CASH'
       });
       // Reset
       setSelectedSlot('');
       setAiAnalysis(null);
       setSymptoms('');
+      setVisitType('New Visit');
     }
   };
 
@@ -294,6 +297,7 @@ export const Appointments = () => {
     setSelectedDate(apt.date);
     setSelectedSlot(apt.time);
     setSymptoms(apt.symptoms || '');
+    setVisitType(apt.visitType || 'New Visit');
     setAiAnalysis(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -306,6 +310,7 @@ export const Appointments = () => {
     setSelectedDate('');
     setSelectedSlot('');
     setSymptoms('');
+    setVisitType('New Visit');
     setAiAnalysis(null);
   };
 
@@ -434,6 +439,18 @@ export const Appointments = () => {
                       <select className="form-input" value={selectedPatient} onChange={e => setSelectedPatient(e.target.value)}>
                           <option value="">Select Patient</option>
                           {patients.map(p => <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>)}
+                      </select>
+                  </div>
+
+                  <div>
+                      <label className="form-label">Visit Type</label>
+                      <select 
+                          className="form-input" 
+                          value={visitType} 
+                          onChange={e => setVisitType(e.target.value as 'New Visit' | 'Follow-up')}
+                      >
+                          <option value="New Visit">New Visit</option>
+                          <option value="Follow-up">Follow-up</option>
                       </select>
                   </div>
 
@@ -637,6 +654,9 @@ export const Appointments = () => {
                                         <div className="font-medium text-slate-900">{new Date(apt.date).toLocaleDateString()}</div>
                                         <div className="text-slate-500 flex items-center text-xs mt-0.5">
                                             <Clock className="w-3 h-3 mr-1" /> {apt.time}
+                                        </div>
+                                        <div className="text-[10px] text-blue-600 font-bold mt-1 uppercase tracking-wide">
+                                            {apt.visitType || 'New Visit'}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
