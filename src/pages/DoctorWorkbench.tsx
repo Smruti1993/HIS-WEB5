@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
 import { DatePicker } from '../components/DatePicker';
-import { Search, User, Activity, FileText, FlaskConical, Stethoscope, Microscope, CheckCircle, AlertCircle, Plus, X, Calendar, Clock, StickyNote, AlertTriangle, ChevronRight, Pill, History, Thermometer } from 'lucide-react';
-import { Appointment, Patient, VitalSign, ClinicalNote, Diagnosis, Allergy } from '../types';
+import { User, Activity, FileText, FlaskConical, Stethoscope, Microscope, X, Calendar, AlertTriangle, ChevronRight } from 'lucide-react';
+import { Appointment } from '../types';
 import { useNavigate } from 'react-router-dom';
 
 const EMRModal = ({ patientId, onClose }: { patientId: string, onClose: () => void }) => {
@@ -283,7 +283,7 @@ const EMRModal = ({ patientId, onClose }: { patientId: string, onClose: () => vo
 };
 
 export const DoctorWorkbench = () => {
-  const { appointments, patients, vitals, diagnoses, saveVitalSign, updateAppointment, bills, clinicalNotes, allergies, employees, departments } = useData();
+  const { appointments, patients, vitals, diagnoses, saveVitalSign, updateAppointment, bills } = useData();
   const navigate = useNavigate();
 
   // --- EMR State ---
