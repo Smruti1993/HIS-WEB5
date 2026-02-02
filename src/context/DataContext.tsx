@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { 
   Patient, Employee, Department, Unit, ServiceCentre, 
   DoctorAvailability, Appointment, ToastMessage, Bill, BillItem, Payment,
-  VitalSign, Diagnosis, ClinicalNote, Allergy, NarrativeDiagnosis
+  VitalSign, Diagnosis, ClinicalNote, Allergy, NarrativeDiagnosis, MasterDiagnosis
 } from '../types';
 import { 
     getSupabase, 
@@ -28,6 +28,9 @@ interface DataContextType {
   
   serviceCentres: ServiceCentre[];
   addServiceCentre: (sc: ServiceCentre) => void;
+
+  masterDiagnoses: MasterDiagnosis[];
+  uploadMasterDiagnoses: (data: MasterDiagnosis[]) => Promise<void>;
   
   availabilities: DoctorAvailability[];
   saveAvailability: (avail: DoctorAvailability) => void;
@@ -72,6 +75,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [departments, setDepartments] = useState<Department[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [serviceCentres, setServiceCentres] = useState<ServiceCentre[]>([]);
+  const [masterDiagnoses, setMasterDiagnoses] = useState<MasterDiagnosis[]>([]);
   const [availabilities, setAvailabilities] = useState<DoctorAvailability[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
@@ -184,6 +188,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     remarks: a.remarks
   });
 
+  const mapMasterDiagFromDb = (m: any): MasterDiagnosis => ({
+      id: m.id, code: m.code, description: m.description, status: m.status
+  });
+
   // --- Initial Fetch ---
 
   useEffect(() => {
@@ -201,7 +209,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const supabase = getSupabase();
 
       try {
-        const [pRes, eRes, dRes, uRes, sRes, avRes, apRes, bRes, biRes, payRes, vRes, diRes, notRes, alRes, narRes] = await Promise.all([
+        const [pRes, eRes, dRes, uRes, sRes, avRes, apRes, bRes, biRes, payRes, vRes, diRes, notRes, alRes, narRes, mdRes] = await Promise.all([
           supabase.from('patients').select('*'),
           supabase.from('employees').select('*'),
           supabase.from('departments').select('*'),
@@ -217,6 +225,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           supabase.from('clinical_notes').select('*'),
           supabase.from('clinical_allergies').select('*'),
           supabase.from('clinical_narrative_diagnoses').select('*'),
+          supabase.from('master_diagnoses').select('*'),
         ]);
 
         if (pRes.error) throw pRes.error;
@@ -233,6 +242,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (notRes.data) setClinicalNotes(notRes.data.map(mapNoteFromDb));
         if (alRes.data) setAllergies(alRes.data.map(mapAllergyFromDb));
         if (narRes.data) setNarrativeDiagnoses(narRes.data.map(mapNarrativeFromDb));
+        if (mdRes.data) setMasterDiagnoses(mdRes.data.map(mapMasterDiagFromDb));
 
         if (bRes.data) {
             const rawBills = bRes.data;
@@ -286,7 +296,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const disconnectDb = () => {
       clearCredentialsFromStorage();
       setIsDbConnected(false);
-      setPatients([]); setEmployees([]); setDepartments([]); setAppointments([]); setAvailabilities([]); setBills([]); setVitals([]); setDiagnoses([]); setClinicalNotes([]); setAllergies([]); setNarrativeDiagnoses([]);
+      setPatients([]); setEmployees([]); setDepartments([]); setAppointments([]); setAvailabilities([]); setBills([]); setVitals([]); setDiagnoses([]); setClinicalNotes([]); setAllergies([]); setNarrativeDiagnoses([]); setMasterDiagnoses([]);
       showToast('info', 'Disconnected from database.');
   };
 
@@ -368,6 +378,29 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { error } = await getSupabase().from('service_centres').insert(s);
     if(error) { showToast('error', error.message); setServiceCentres(prev => prev.filter(sc => sc.id !== s.id)); }
     else showToast('success', 'Service Centre added.');
+  };
+
+  const uploadMasterDiagnoses = async (data: MasterDiagnosis[]) => {
+      if (!requireDb()) return;
+      
+      setMasterDiagnoses(prev => [...prev, ...data]); // Optimistic update
+      const dbData = data.map(d => ({
+          id: d.id,
+          code: d.code,
+          description: d.description,
+          status: d.status
+      }));
+
+      const { error } = await getSupabase().from('master_diagnoses').insert(dbData);
+      
+      if (error) {
+          showToast('error', `Bulk upload failed: ${error.message}`);
+          // Rollback handled by just refreshing page effectively, but strictly we should filter them out
+          // For now, trigger refresh
+          setRefreshTrigger(prev => prev + 1);
+      } else {
+          showToast('success', `${data.length} diagnoses imported successfully.`);
+      }
   };
 
   const saveAvailability = async (avail: DoctorAvailability) => {
@@ -550,6 +583,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       departments, addDepartment,
       units, addUnit,
       serviceCentres, addServiceCentre,
+      masterDiagnoses, uploadMasterDiagnoses,
       availabilities, saveAvailability, deleteAvailability,
       appointments, bookAppointment, updateAppointment, cancelAppointment,
       bills, createBill, addPayment,

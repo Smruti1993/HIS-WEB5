@@ -46,6 +46,14 @@ CREATE TABLE IF NOT EXISTS service_centres (
     status TEXT DEFAULT 'Active'
 );
 
+-- New Master Table for ICD Codes/Diagnoses Reference
+CREATE TABLE IF NOT EXISTS master_diagnoses (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL, -- ICD Code
+    description TEXT NOT NULL,
+    status TEXT DEFAULT 'Active'
+);
+
 -- ==========================================
 -- 2. Staff & Patients
 -- ==========================================
@@ -219,6 +227,7 @@ CREATE INDEX IF NOT EXISTS idx_clinical_narrative_appt ON clinical_narrative_dia
 CREATE INDEX IF NOT EXISTS idx_clinical_allergies_patient ON clinical_allergies(patient_id);
 CREATE INDEX IF NOT EXISTS idx_patients_name ON patients(last_name);
 CREATE INDEX IF NOT EXISTS idx_employees_dept ON employees(department_id);
+CREATE INDEX IF NOT EXISTS idx_master_diagnoses_desc ON master_diagnoses(description);
 
 -- ==========================================
 -- 7. Security (Row Level Security)
@@ -227,6 +236,7 @@ CREATE INDEX IF NOT EXISTS idx_employees_dept ON employees(department_id);
 ALTER TABLE departments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE units ENABLE ROW LEVEL SECURITY;
 ALTER TABLE service_centres ENABLE ROW LEVEL SECURITY;
+ALTER TABLE master_diagnoses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE employees ENABLE ROW LEVEL SECURITY;
 ALTER TABLE patients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE doctor_availability ENABLE ROW LEVEL SECURITY;
@@ -244,6 +254,7 @@ ALTER TABLE clinical_notes ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Enable all access for all users" ON departments FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON units FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON service_centres FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for all users" ON master_diagnoses FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON employees FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON patients FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON doctor_availability FOR ALL USING (true) WITH CHECK (true);

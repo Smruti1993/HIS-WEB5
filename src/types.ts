@@ -11,6 +11,14 @@ export interface Department extends MasterEntity {}
 export interface Unit extends MasterEntity {}
 export interface ServiceCentre extends MasterEntity {}
 
+// New Interface for Master Diagnosis List
+export interface MasterDiagnosis {
+  id: string;
+  code: string; // ICD Code
+  description: string;
+  status: 'Active' | 'Inactive';
+}
+
 export enum EmployeeRole {
   DOCTOR = 'Doctor',
   NURSE = 'Nurse',

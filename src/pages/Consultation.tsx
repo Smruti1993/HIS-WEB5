@@ -4,7 +4,7 @@ import { useData } from '../context/DataContext';
 import { 
   User, Info, Save, Printer, FileText, Bell, Activity, Stethoscope, Briefcase, 
   Pill, Clock, FileInput, ChevronRight, ChevronDown, 
-  Bold, Italic, Underline, List, AlignLeft, Type, Download, XCircle, Cloud, CheckCircle, Loader2, Calculator, Plus, Trash2, Search, RotateCcw
+  Bold, Italic, Underline, List, AlignLeft, Type, Download, XCircle, Cloud, CheckCircle, Loader2, Calculator, Plus, Trash2, Search, RotateCcw, History
 } from 'lucide-react';
 import { VitalSign, Allergy, Diagnosis } from '../types';
 
@@ -41,20 +41,12 @@ const ALLERGY_REACTIONS = [
 
 const ALLERGY_TYPES = ['Drug', 'Environmental', 'Food', 'NonFormulaDrug'];
 
-// Mock ICD Data for Search
-const MOCK_ICD_CODES = [
-    { code: 'A00', desc: 'Cholera' },
-    { code: 'A01', desc: 'Typhoid and paratyphoid fevers' },
-    { code: 'E11.9', desc: 'Type 2 diabetes mellitus without complications' },
-    { code: 'I10', desc: 'Essential (primary) hypertension' },
-    { code: 'J00', desc: 'Acute nasopharyngitis [common cold]' },
-    { code: 'J06.9', desc: 'Acute upper respiratory infection, unspecified' },
-    { code: 'K29.7', desc: 'Gastritis, unspecified' },
-    { code: 'R51', desc: 'Headache' },
-    { code: 'R05', desc: 'Cough' },
-    { code: 'R50.9', desc: 'Fever, unspecified' },
-    { code: 'M54.5', desc: 'Low back pain' },
-    { code: 'Z00.0', desc: 'Encounter for general adult medical examination' },
+// Mock ICD Data fallback if DB is empty
+const FALLBACK_ICD_CODES = [
+    { code: 'A00', description: 'Cholera' },
+    { code: 'A01', description: 'Typhoid and paratyphoid fevers' },
+    { code: 'E11.9', description: 'Type 2 diabetes mellitus without complications' },
+    { code: 'I10', description: 'Essential (primary) hypertension' },
 ];
 
 // --- Components ---
@@ -461,7 +453,8 @@ const AllergyEntryModal = ({ patientId, onClose }: { patientId: string, onClose:
 const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string, onClose: () => void }) => {
     const { 
         diagnoses, saveDiagnosis, deleteDiagnosis, 
-        narrativeDiagnoses, saveNarrativeDiagnosis, showToast 
+        narrativeDiagnoses, saveNarrativeDiagnosis, showToast,
+        masterDiagnoses 
     } = useData();
 
     // -- State for Narrative --
@@ -477,8 +470,12 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
     // -- State for ICD --
     const [searchPrimary, setSearchPrimary] = useState('');
     const [searchSecondary, setSearchSecondary] = useState('');
-    const [searchResultsPrimary, setSearchResultsPrimary] = useState(MOCK_ICD_CODES);
-    const [searchResultsSecondary, setSearchResultsSecondary] = useState(MOCK_ICD_CODES);
+    
+    // Fallback if master list is empty
+    const availableCodes = masterDiagnoses.length > 0 ? masterDiagnoses : FALLBACK_ICD_CODES;
+
+    const [searchResultsPrimary, setSearchResultsPrimary] = useState(availableCodes);
+    const [searchResultsSecondary, setSearchResultsSecondary] = useState(availableCodes);
     const [noComorbidities, setNoComorbidities] = useState(false);
     
     // Present On Admission checkboxes for new entries
@@ -492,22 +489,22 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
     // -- Effects --
     useEffect(() => {
         if (searchPrimary) {
-            setSearchResultsPrimary(MOCK_ICD_CODES.filter(c => c.desc.toLowerCase().includes(searchPrimary.toLowerCase()) || c.code.includes(searchPrimary)));
+            setSearchResultsPrimary(availableCodes.filter(c => c.description.toLowerCase().includes(searchPrimary.toLowerCase()) || c.code.toLowerCase().includes(searchPrimary.toLowerCase())));
         } else {
-            setSearchResultsPrimary(MOCK_ICD_CODES);
+            setSearchResultsPrimary(availableCodes);
         }
-    }, [searchPrimary]);
+    }, [searchPrimary, masterDiagnoses]);
 
     useEffect(() => {
         if (searchSecondary) {
-            setSearchResultsSecondary(MOCK_ICD_CODES.filter(c => c.desc.toLowerCase().includes(searchSecondary.toLowerCase()) || c.code.includes(searchSecondary)));
+            setSearchResultsSecondary(availableCodes.filter(c => c.description.toLowerCase().includes(searchSecondary.toLowerCase()) || c.code.toLowerCase().includes(searchSecondary.toLowerCase())));
         } else {
-            setSearchResultsSecondary(MOCK_ICD_CODES);
+            setSearchResultsSecondary(availableCodes);
         }
-    }, [searchSecondary]);
+    }, [searchSecondary, masterDiagnoses]);
 
     // -- Handlers --
-    const handleAddDiagnosis = (icd: {code: string, desc: string}, type: 'Primary' | 'Secondary') => {
+    const handleAddDiagnosis = (icd: {code: string, description: string}, type: 'Primary' | 'Secondary') => {
         // Prevent duplicate ICDs for the same type
         const exists = diagnoses.some(d => d.appointmentId === appointmentId && d.type === type && d.icdCode === icd.code);
         if (exists) {
@@ -521,7 +518,7 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
             id: Date.now().toString(),
             appointmentId,
             icdCode: icd.code,
-            description: icd.desc,
+            description: icd.description,
             type: type,
             isPoa: isPoa,
             addedAt: new Date().toISOString()
@@ -668,15 +665,19 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
                                 </div>
                                 {searchPrimary && (
                                     <div className="absolute bg-white border border-slate-200 shadow-lg rounded mt-8 w-64 z-20 max-h-40 overflow-y-auto">
-                                        {searchResultsPrimary.map(res => (
-                                            <div 
-                                                key={res.code} 
-                                                onClick={() => handleAddDiagnosis(res, 'Primary')}
-                                                className="px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-0"
-                                            >
-                                                <span className="font-bold text-slate-700">{res.code}</span> - {res.desc}
-                                            </div>
-                                        ))}
+                                        {searchResultsPrimary.length === 0 ? (
+                                            <div className="px-3 py-2 text-sm text-slate-400 italic">No matches found</div>
+                                        ) : (
+                                            searchResultsPrimary.slice(0, 50).map(res => (
+                                                <div 
+                                                    key={res.code} 
+                                                    onClick={() => handleAddDiagnosis(res, 'Primary')}
+                                                    className="px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-0"
+                                                >
+                                                    <span className="font-bold text-slate-700">{res.code}</span> - {res.description}
+                                                </div>
+                                            ))
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -750,15 +751,19 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
                                     </div>
                                     {searchSecondary && (
                                         <div className="absolute right-0 top-full bg-white border border-slate-200 shadow-lg rounded mt-1 w-64 z-20 max-h-40 overflow-y-auto">
-                                            {searchResultsSecondary.map(res => (
-                                                <div 
-                                                    key={res.code} 
-                                                    onClick={() => handleAddDiagnosis(res, 'Secondary')}
-                                                    className="px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-0"
-                                                >
-                                                    <span className="font-bold text-slate-700">{res.code}</span> - {res.desc}
-                                                </div>
-                                            ))}
+                                            {searchResultsSecondary.length === 0 ? (
+                                                <div className="px-3 py-2 text-sm text-slate-400 italic">No matches found</div>
+                                            ) : (
+                                                searchResultsSecondary.slice(0, 50).map(res => (
+                                                    <div 
+                                                        key={res.code} 
+                                                        onClick={() => handleAddDiagnosis(res, 'Secondary')}
+                                                        className="px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-0"
+                                                    >
+                                                        <span className="font-bold text-slate-700">{res.code}</span> - {res.description}
+                                                    </div>
+                                                ))
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -809,220 +814,161 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
 };
 
 export const Consultation = () => {
-    const { appointmentId } = useParams();
-    const navigate = useNavigate();
-    const { appointments, patients, vitals, diagnoses, clinicalNotes, saveClinicalNote } = useData();
+  const { appointmentId } = useParams<{ appointmentId: string }>();
+  const navigate = useNavigate();
+  const { appointments, patients, vitals, updateAppointment, clinicalNotes, saveClinicalNote } = useData();
+  
+  const [activeSection, setActiveSection] = useState('Chief Complaint');
+  
+  // Modal states
+  const [showVitals, setShowVitals] = useState(false);
+  const [showAllergy, setShowAllergy] = useState(false);
+  const [showDiagnosis, setShowDiagnosis] = useState(false);
+  
+  const appointment = appointments.find(a => a.id === appointmentId);
+  const patient = patients.find(p => p.id === appointment?.patientId);
 
-    // State for Modals
-    const [showVitals, setShowVitals] = useState(false);
-    const [showAllergy, setShowAllergy] = useState(false);
-    const [showDiagnosis, setShowDiagnosis] = useState(false);
+  // If not found, handle gracefully (redirect or show error)
+  if (!appointment || !patient) {
+      return <div className="p-10 text-center">Loading or Appointment not found...</div>;
+  }
 
-    // State for Content
-    const [activeSection, setActiveSection] = useState('Chief Complaint');
-    const [noteContent, setNoteContent] = useState('');
+  // Keyboard shortcuts
+  useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+          if (e.key === 'F7') { e.preventDefault(); setShowVitals(true); }
+          if (e.key === 'F8') { e.preventDefault(); setShowAllergy(true); }
+          if (e.key === 'F5') { e.preventDefault(); setShowDiagnosis(true); }
+          // F3 for orders - placeholder
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
-    const appointment = appointments.find(a => a.id === appointmentId);
-    const patient = patients.find(p => p.id === appointment?.patientId);
+  const handleComplete = () => {
+      updateAppointment(appointment.id, { status: 'Completed', checkOutTime: new Date().toISOString() });
+      navigate('/doctor-workbench');
+  };
 
-    // Load existing note for the active section
-    useEffect(() => {
-        if (appointmentId) {
-            const existingNote = clinicalNotes.find(n => n.appointmentId === appointmentId && n.noteType === activeSection);
-            setNoteContent(existingNote?.description || '');
-        }
-    }, [appointmentId, activeSection, clinicalNotes]);
+  return (
+    <div className="flex h-screen bg-slate-100 overflow-hidden">
+        {/* Modals */}
+        {showVitals && <VitalsEntryModal appointmentId={appointment.id} onClose={() => setShowVitals(false)} />}
+        {showAllergy && <AllergyEntryModal patientId={patient.id} onClose={() => setShowAllergy(false)} />}
+        {showDiagnosis && <DiagnosisEntryModal appointmentId={appointment.id} onClose={() => setShowDiagnosis(false)} />}
 
-    const handleSaveNote = () => {
-        if (appointmentId) {
-            saveClinicalNote({
-                id: Date.now().toString(),
-                appointmentId,
-                noteType: activeSection,
-                description: noteContent,
-                recordedAt: new Date().toISOString()
-            });
-        }
-    };
-
-    const handleBack = () => {
-        navigate('/doctor-workbench');
-    };
-
-    if (!appointment || !patient) {
-        return <div className="p-10 text-center">Loading consultation...</div>;
-    }
-
-    const age = new Date().getFullYear() - new Date(patient.dob).getFullYear();
-
-    // Hotkeys handler (optional, but requested in UI via F-keys labels)
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'F7') { e.preventDefault(); setShowVitals(true); }
-            if (e.key === 'F8') { e.preventDefault(); setShowAllergy(true); }
-            if (e.key === 'F5') { e.preventDefault(); setShowDiagnosis(true); }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, []);
-
-    const ToolbarButton = ({ icon: Icon }: { icon: any }) => (
-        <button className="p-1.5 hover:bg-slate-200 text-slate-600 rounded transition-colors">
-            <Icon className="w-4 h-4" />
-        </button>
-    );
-
-    return (
-        <div className="flex flex-col h-screen bg-slate-100 overflow-hidden fixed inset-0 z-50">
-            {/* Top Bar: Patient Banner */}
-            <div className="bg-slate-800 text-white h-14 flex items-center justify-between px-4 shrink-0 shadow-md z-20">
-                <div className="flex items-center gap-4">
-                    <button onClick={handleBack} className="text-slate-400 hover:text-white transition-colors">
-                        <XCircle className="w-6 h-6" />
-                    </button>
-                    <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center font-bold text-sm">
-                            {patient.firstName[0]}{patient.lastName[0]}
-                        </div>
-                        <div>
-                            <div className="font-bold text-sm leading-none">{patient.firstName} {patient.lastName}</div>
-                            <div className="text-xs text-slate-400 leading-none mt-1">
-                                {patient.gender} • {age} Yrs • ID: {patient.id.slice(-6).toUpperCase()}
-                            </div>
-                        </div>
-                    </div>
-                    <div className="h-8 w-px bg-slate-600 mx-2"></div>
-                    <div className="flex items-center gap-6 text-xs">
-                        <div>
-                            <span className="text-slate-400 block text-[10px] uppercase">Visit Date</span>
-                            <span className="font-bold">{new Date(appointment.date).toLocaleDateString()}</span>
-                        </div>
-                        <div>
-                            <span className="text-slate-400 block text-[10px] uppercase">Department</span>
-                            <span className="font-bold">General Medicine</span>
-                        </div>
-                         <div>
-                            <span className="text-slate-400 block text-[10px] uppercase">Doctor</span>
-                            <span className="font-bold">Dr. Sarah Connor</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <div className="flex items-center gap-3">
-                     <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-xs font-bold flex items-center gap-2 transition-colors">
-                        <Save className="w-3.5 h-3.5" /> Save Consultation
-                    </button>
-                </div>
+        {/* Sidebar */}
+        <div className="w-64 bg-slate-800 text-slate-300 flex flex-col shrink-0">
+            <div className="h-14 flex items-center px-4 font-bold text-white border-b border-slate-700 bg-slate-900">
+                Consultation
             </div>
-
-            {/* Toolbar */}
-            <div className="bg-white border-b border-slate-200 px-2 py-1 flex items-center gap-1 shrink-0 overflow-x-auto shadow-sm z-10">
-                {TOP_TOOLS.map(tool => (
-                    <button 
-                        key={tool.id}
-                        onClick={() => {
-                            if (tool.id === 'Vitals') setShowVitals(true);
-                            if (tool.id === 'Allergy') setShowAllergy(true);
-                            if (tool.id === 'Diagnosis') setShowDiagnosis(true);
-                        }}
-                        className="flex flex-col items-center justify-center min-w-[70px] px-2 py-1.5 hover:bg-slate-50 rounded-lg transition-colors group"
+            <div className="flex-1 overflow-y-auto py-2">
+                {SIDEBAR_ITEMS.map(item => (
+                    <button
+                        key={item.id}
+                        onClick={() => setActiveSection(item.id)}
+                        className={`w-full text-left px-4 py-3 text-sm font-medium transition-colors border-l-4 ${
+                            activeSection === item.id 
+                            ? 'bg-slate-700 text-white border-blue-500' 
+                            : 'border-transparent hover:bg-slate-700 hover:text-white'
+                        }`}
                     >
-                        <tool.icon className={`w-5 h-5 mb-1 ${tool.color} group-hover:scale-110 transition-transform`} />
-                        <span className="text-[10px] font-bold text-slate-600 leading-none">{tool.label}</span>
+                        {item.label}
                     </button>
                 ))}
             </div>
+            <div className="p-4 border-t border-slate-700">
+                <button onClick={() => navigate('/doctor-workbench')} className="flex items-center text-sm hover:text-white transition-colors">
+                    <ChevronDown className="w-4 h-4 mr-2 rotate-90" /> Back to Workbench
+                </button>
+            </div>
+        </div>
 
-            {/* Main Workspace */}
-            <div className="flex-1 flex overflow-hidden">
-                {/* Sidebar Navigation */}
-                <div className="w-64 bg-slate-50 border-r border-slate-200 flex flex-col shrink-0 overflow-y-auto">
-                    {SIDEBAR_ITEMS.map(item => (
-                        <button
-                            key={item.id}
-                            onClick={() => setActiveSection(item.id)}
-                            className={`flex items-center w-full px-4 py-3 text-sm font-medium border-l-4 transition-all ${
-                                activeSection === item.id 
-                                ? 'bg-white border-blue-600 text-blue-700 shadow-sm z-10' 
-                                : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-800'
-                            }`}
-                        >
-                            {activeSection === item.id && <ChevronRight className="w-4 h-4 mr-2" />}
-                            {item.label}
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col min-w-0">
+            {/* Top Header with Tools */}
+            <div className="bg-white border-b border-slate-200 shadow-sm shrink-0">
+                {/* Patient Banner */}
+                <div className="px-6 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                    <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold">
+                            {patient.firstName[0]}{patient.lastName[0]}
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-bold text-slate-800">{patient.firstName} {patient.lastName}</h2>
+                            <p className="text-xs text-slate-500 flex gap-2">
+                                <span>{new Date().getFullYear() - new Date(patient.dob).getFullYear()} Yrs / {patient.gender}</span>
+                                <span>•</span>
+                                <span className="font-mono">ID: {patient.id.slice(-6)}</span>
+                                <span>•</span>
+                                <span className="text-blue-600">{appointment.visitType || 'New Visit'}</span>
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex gap-2">
+                        <button className="bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded text-xs font-bold hover:bg-slate-50 flex items-center gap-1">
+                            <History className="w-3.5 h-3.5" /> Previous Visits
                         </button>
-                    ))}
+                        <button onClick={handleComplete} className="bg-green-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-green-700 shadow-sm flex items-center gap-1">
+                            <CheckCircle className="w-3.5 h-3.5" /> Complete Consult
+                        </button>
+                    </div>
                 </div>
 
-                {/* Editor Area */}
-                <div className="flex-1 bg-white flex flex-col relative">
-                     {/* Editor Toolbar */}
-                     <div className="h-10 border-b border-slate-200 bg-slate-50 flex items-center px-2 gap-1 shrink-0">
-                        <ToolbarButton icon={Bold} />
-                        <ToolbarButton icon={Italic} />
-                        <ToolbarButton icon={Underline} />
-                        <div className="w-px h-5 bg-slate-300 mx-1"></div>
-                        <ToolbarButton icon={AlignLeft} />
-                        <ToolbarButton icon={List} />
-                        <div className="w-px h-5 bg-slate-300 mx-1"></div>
-                        <ToolbarButton icon={Type} />
-                        
-                        <div className="ml-auto text-xs text-slate-400 font-medium px-2">
-                             Auto-saved
-                        </div>
-                     </div>
-                     
-                     {/* Text Area */}
-                     <div className="flex-1 p-8 overflow-y-auto">
-                        <div className="max-w-4xl mx-auto">
-                            <h2 className="text-xl font-bold text-slate-800 mb-6 border-b pb-2">{activeSection}</h2>
-                            <textarea
-                                className="w-full h-[60vh] resize-none outline-none text-slate-700 leading-relaxed p-4 border border-slate-100 rounded-lg focus:border-blue-200 focus:ring-4 focus:ring-blue-50/50 transition-all text-base"
-                                placeholder={`Enter ${activeSection.toLowerCase()} details here...`}
-                                value={noteContent}
-                                onChange={e => setNoteContent(e.target.value)}
-                                onBlur={handleSaveNote}
-                            ></textarea>
-                        </div>
-                     </div>
-                </div>
-                
-                {/* Right Panel (Collapsible/Optional) - e.g., for Quick Reference */}
-                <div className="w-72 bg-slate-50 border-l border-slate-200 hidden xl:flex flex-col overflow-y-auto shrink-0">
-                     <div className="p-4 border-b border-slate-200 font-bold text-slate-700 text-sm bg-white">
-                         Quick Reference
-                     </div>
-                     <div className="p-4 space-y-4">
-                         <div className="bg-white p-3 rounded border border-slate-200 shadow-sm">
-                             <div className="text-xs font-bold text-slate-500 uppercase mb-2">Latest Vitals</div>
-                             {vitals.filter(v => v.appointmentId === appointmentId).length > 0 ? (
-                                 <div className="space-y-1 text-sm">
-                                     {/* Just showing generic data for demo since vitals are complex to sort/filter here efficiently without logic */}
-                                     <div className="flex justify-between"><span>BP:</span> <span className="font-bold">120/80</span></div>
-                                     <div className="flex justify-between"><span>Temp:</span> <span className="font-bold">36.5°C</span></div>
-                                     <div className="flex justify-between"><span>Pulse:</span> <span className="font-bold">72 bpm</span></div>
-                                 </div>
-                             ) : <div className="text-xs text-slate-400 italic">No vitals recorded today</div>}
-                         </div>
-
-                         <div className="bg-white p-3 rounded border border-slate-200 shadow-sm">
-                             <div className="text-xs font-bold text-slate-500 uppercase mb-2">Diagnoses</div>
-                             {diagnoses.filter(d => d.appointmentId === appointmentId).length > 0 ? (
-                                <ul className="list-disc list-inside text-sm text-slate-700 space-y-1">
-                                    {diagnoses.filter(d => d.appointmentId === appointmentId).map(d => (
-                                        <li key={d.id}>{d.description}</li>
-                                    ))}
-                                </ul>
-                             ) : <div className="text-xs text-slate-400 italic">No diagnosis added</div>}
-                         </div>
-                     </div>
+                {/* Toolbar */}
+                <div className="px-4 py-2 flex items-center gap-2 overflow-x-auto">
+                    {TOP_TOOLS.map(tool => {
+                        const Icon = tool.icon;
+                        return (
+                            <button 
+                                key={tool.id}
+                                onClick={() => {
+                                    if(tool.id === 'Vitals') setShowVitals(true);
+                                    if(tool.id === 'Allergy') setShowAllergy(true);
+                                    if(tool.id === 'Diagnosis') setShowDiagnosis(true);
+                                }}
+                                className="flex flex-col items-center justify-center min-w-[80px] p-2 hover:bg-slate-50 rounded-lg transition-colors group"
+                            >
+                                <div className={`w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center mb-1 group-hover:bg-white group-hover:shadow-sm transition-all border border-slate-200 ${tool.color}`}>
+                                    <Icon className="w-4 h-4" />
+                                </div>
+                                <span className="text-[10px] font-bold text-slate-600">{tool.label}</span>
+                            </button>
+                        )
+                    })}
                 </div>
             </div>
 
-            {/* Modals */}
-            {showVitals && appointmentId && <VitalsEntryModal appointmentId={appointmentId} onClose={() => setShowVitals(false)} />}
-            {showAllergy && patient && <AllergyEntryModal patientId={patient.id} onClose={() => setShowAllergy(false)} />}
-            {showDiagnosis && appointmentId && <DiagnosisEntryModal appointmentId={appointmentId} onClose={() => setShowDiagnosis(false)} />}
+            {/* Active Section Content */}
+            <div className="flex-1 overflow-y-auto p-6 bg-slate-100">
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 min-h-full p-8">
+                    <h3 className="text-xl font-bold text-slate-800 mb-4 border-b pb-2 flex items-center gap-2">
+                        <FileText className="w-5 h-5 text-blue-500" />
+                        {SIDEBAR_ITEMS.find(i => i.id === activeSection)?.label}
+                    </h3>
+                    
+                    <div className="max-w-4xl">
+                        {/* Placeholder for dynamic section content */}
+                        <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg text-yellow-800 text-sm mb-4">
+                            Currently editing: <strong>{activeSection}</strong>. <br/>
+                            Use the tools above or sidebar to navigate.
+                        </div>
 
+                        {/* Example: Simple Text Area for notes for now */}
+                        <textarea 
+                            className="w-full h-64 p-4 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none text-slate-700 leading-relaxed"
+                            placeholder={`Enter details for ${activeSection}...`}
+                        ></textarea>
+                        
+                        <div className="mt-4 flex justify-end">
+                            <button className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors">
+                                Save {activeSection}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-    );
+    </div>
+  );
 };
