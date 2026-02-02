@@ -4,9 +4,9 @@ import { useData } from '../context/DataContext';
 import { 
   User, Info, Save, Printer, FileText, Bell, Activity, Stethoscope, Briefcase, 
   Pill, Clock, FileInput, ChevronRight, ChevronDown, 
-  Bold, Italic, Underline, List, AlignLeft, Type, Download, XCircle, Cloud, CheckCircle, Loader2, Calculator
+  Bold, Italic, Underline, List, AlignLeft, Type, Download, XCircle, Cloud, CheckCircle, Loader2, Calculator, Plus, Trash2
 } from 'lucide-react';
-import { VitalSign } from '../types';
+import { VitalSign, Allergy } from '../types';
 
 // --- Static Configs ---
 const SIDEBAR_ITEMS = [
@@ -34,11 +34,20 @@ const TOP_TOOLS = [
     { id: 'Referral', label: 'Referral', icon: Briefcase, color: 'text-purple-600' },
 ];
 
+const ALLERGY_REACTIONS = [
+    'Cough', 'Dermatographism', 'Diarrhea', 'Dizziness', 'Headache', 
+    'Nausea', 'Running Nose', 'Skin Rash', 'Sneezing', 'Swelling', 'Vomiting'
+];
+
+const ALLERGY_TYPES = ['Drug', 'Environmental', 'Food', 'NonFormulaDrug'];
+
+// --- Components ---
+
 const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, onClose: () => void }) => {
+    // ... (Existing Vitals Modal Code)
     const { vitals, saveVitalSign } = useData();
     const existingVital = vitals.find(v => v.appointmentId === appointmentId);
 
-    // Initial state based on existing record or empty defaults
     const [formData, setFormData] = useState({
         temperature: existingVital?.temperature?.toString() || '',
         sys: existingVital?.bpSystolic?.toString() || '',
@@ -49,14 +58,11 @@ const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, o
         height: existingVital?.height?.toString() || '',
         weight: existingVital?.weight?.toString() || '',
         tobacco: existingVital?.tobaccoUse || '',
-        // Calculated/Derived but editable if needed
         map: existingVital?.map?.toString() || '',
         bmi: existingVital?.bmi?.toString() || '',
-        // Remarks
         remarks: existingVital?.rowRemarks || {} as Record<string, string>
     });
 
-    // Auto-calculate logic
     useEffect(() => {
         const h = parseFloat(formData.height);
         const w = parseFloat(formData.weight);
@@ -103,7 +109,6 @@ const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, o
         onClose();
     };
 
-    // Configuration for rows
     const rows = [
         { label: 'Temperature', key: 'temperature', unit: '°C', range: '36.5 - 37.4' },
         { label: 'Intravascular systolic', key: 'sys', unit: 'mmHg', range: '95.0 - 140.0' },
@@ -121,7 +126,6 @@ const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, o
     return (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[85vh] overflow-hidden animate-in zoom-in-95 duration-200">
-                {/* Header */}
                 <div className="bg-slate-800 px-5 py-3 flex justify-between items-center text-white shrink-0">
                     <h3 className="font-bold text-base flex items-center gap-2">
                         <Activity className="w-5 h-5 text-blue-400" /> Record Vital Signs
@@ -130,8 +134,6 @@ const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, o
                         <XCircle className="w-5 h-5" />
                     </button>
                 </div>
-                
-                {/* Scrollable Content */}
                 <div className="flex-1 overflow-y-auto p-0">
                     <table className="w-full text-sm border-collapse">
                         <thead className="bg-slate-100 text-slate-600 sticky top-0 z-10 shadow-sm text-xs uppercase">
@@ -146,9 +148,7 @@ const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, o
                         <tbody className="divide-y divide-slate-100">
                             {rows.map((row, idx) => (
                                 <tr key={row.key} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-4 py-2.5 font-medium text-slate-700">
-                                        {row.label}
-                                    </td>
+                                    <td className="px-4 py-2.5 font-medium text-slate-700">{row.label}</td>
                                     <td className="px-4 py-2.5">
                                         <div className="relative">
                                             <input 
@@ -178,21 +178,264 @@ const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, o
                         </tbody>
                     </table>
                 </div>
-
-                {/* Footer */}
                 <div className="p-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-200 shrink-0">
-                    <button 
-                        onClick={onClose}
-                        className="px-5 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-medium hover:bg-white hover:border-slate-400 transition-colors"
-                    >
-                        Cancel
+                    <button onClick={onClose} className="px-5 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-medium hover:bg-white hover:border-slate-400 transition-colors">Cancel</button>
+                    <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-bold shadow-md shadow-blue-200 transition-all flex items-center gap-2"><Save className="w-4 h-4" /> Save Vitals</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const AllergyEntryModal = ({ patientId, onClose }: { patientId: string, onClose: () => void }) => {
+    const { allergies, saveAllergy, showToast } = useData();
+    const patientAllergies = allergies.filter(a => a.patientId === patientId);
+
+    const [form, setForm] = useState({
+        allergyType: '',
+        allergicTo: '',
+        onSet: '', // Text desc
+        onsetDate: '',
+        allergyStatus: 'Active',
+        resolvedDate: '',
+        remarks: ''
+    });
+    const [selectedReactions, setSelectedReactions] = useState<string[]>([]);
+    const [noKnownAllergies, setNoKnownAllergies] = useState(false);
+
+    const handleSave = () => {
+        if (noKnownAllergies) {
+            // Save a specific record indicating No Known Allergies
+            saveAllergy({
+                id: Date.now().toString(),
+                patientId,
+                allergen: 'No Known Allergies',
+                allergyType: 'NKA', // Specific code for No Known Allergies
+                severity: '',
+                reaction: '',
+                status: 'Active',
+                onsetDate: new Date().toISOString(),
+                resolvedDate: '',
+                remarks: 'Patient confirmed no known allergies.'
+            });
+            onClose();
+            return;
+        }
+
+        if (!form.allergyType || !form.allergicTo) {
+            showToast('error', 'Please fill required fields (Type, Allergic To)');
+            return;
+        }
+
+        saveAllergy({
+            id: Date.now().toString(),
+            patientId,
+            allergen: form.allergicTo,
+            allergyType: form.allergyType,
+            severity: 'Moderate', // Default for now as not in detailed form
+            status: form.allergyStatus as 'Active' | 'Resolved',
+            onsetDate: form.onsetDate,
+            resolvedDate: form.resolvedDate,
+            reaction: selectedReactions.join(', '),
+            remarks: form.remarks
+        });
+        
+        // Reset form for next entry
+        setForm({
+            allergyType: '', allergicTo: '', onSet: '', onsetDate: '',
+            allergyStatus: 'Active', resolvedDate: '', remarks: ''
+        });
+        setSelectedReactions([]);
+    };
+
+    const toggleReaction = (r: string) => {
+        if (selectedReactions.includes(r)) {
+            setSelectedReactions(prev => prev.filter(x => x !== r));
+        } else {
+            setSelectedReactions(prev => [...prev, r]);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+                {/* Header */}
+                <div className="bg-slate-800 px-5 py-3 flex justify-between items-center text-white shrink-0">
+                    <h3 className="font-bold text-base flex items-center gap-2">
+                        <Bell className="w-5 h-5 text-red-400" /> Allergy Management
+                    </h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+                        <XCircle className="w-5 h-5" />
                     </button>
-                    <button 
-                        onClick={handleSave}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-bold shadow-md shadow-blue-200 transition-all flex items-center gap-2"
-                    >
-                        <Save className="w-4 h-4" /> Save Vitals
-                    </button>
+                </div>
+
+                <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+                    {/* Left: Existing List */}
+                    <div className="flex-1 bg-slate-50 border-r border-slate-200 flex flex-col overflow-hidden">
+                        <div className="p-3 bg-slate-100 border-b border-slate-200 font-bold text-slate-700 text-sm">
+                            Existing Allergy
+                        </div>
+                        <div className="flex-1 overflow-y-auto">
+                            <table className="w-full text-sm text-left">
+                                <thead className="bg-slate-200 text-slate-600 text-xs uppercase sticky top-0">
+                                    <tr>
+                                        <th className="px-4 py-2">Category</th>
+                                        <th className="px-4 py-2">Allergic To</th>
+                                        <th className="px-4 py-2">Status</th>
+                                        <th className="px-4 py-2">Reaction</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-200">
+                                    {patientAllergies.length === 0 ? (
+                                        <tr><td colSpan={4} className="p-8 text-center text-slate-400 italic">No allergies recorded yet.</td></tr>
+                                    ) : (
+                                        patientAllergies.map(a => (
+                                            <tr key={a.id} className="bg-white">
+                                                <td className="px-4 py-2 text-slate-600">{a.allergyType || '-'}</td>
+                                                <td className="px-4 py-2 font-medium text-slate-800">{a.allergen}</td>
+                                                <td className="px-4 py-2">
+                                                    <span className={`px-2 py-0.5 rounded text-xs ${a.status === 'Active' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                                                        {a.status}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-2 text-xs text-slate-500 max-w-[150px] truncate" title={a.reaction}>
+                                                    {a.reaction}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {/* Right: Form */}
+                    <div className="flex-[1.2] flex flex-col bg-white overflow-y-auto">
+                        <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-blue-50/30">
+                            <label className="flex items-center gap-2 font-bold text-slate-700 cursor-pointer select-none">
+                                <input 
+                                    type="checkbox" 
+                                    className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                                    checked={noKnownAllergies}
+                                    onChange={e => setNoKnownAllergies(e.target.checked)}
+                                />
+                                No Known Allergies
+                            </label>
+                            <button 
+                                onClick={() => {
+                                    setForm({ allergyType: '', allergicTo: '', onSet: '', onsetDate: '', allergyStatus: 'Active', resolvedDate: '', remarks: '' });
+                                    setSelectedReactions([]);
+                                    setNoKnownAllergies(false);
+                                }}
+                                className="bg-blue-600 text-white text-xs px-3 py-1.5 rounded flex items-center gap-1 hover:bg-blue-700 transition-colors"
+                            >
+                                <Plus className="w-3 h-3" /> New Allergy
+                            </button>
+                        </div>
+
+                        <div className={`p-6 space-y-4 ${noKnownAllergies ? 'opacity-50 pointer-events-none' : ''}`}>
+                            <h4 className="font-bold text-slate-800 border-b border-slate-200 pb-2">Allergy Details</h4>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-600 block mb-1">Allergy Type</label>
+                                    <select 
+                                        className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500 bg-white"
+                                        value={form.allergyType}
+                                        onChange={e => setForm({...form, allergyType: e.target.value})}
+                                    >
+                                        <option value="">-- Select --</option>
+                                        {ALLERGY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-600 block mb-1">Allergic To <span className="text-red-500">*</span></label>
+                                    <input 
+                                        className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500"
+                                        placeholder="Substance name..."
+                                        value={form.allergicTo}
+                                        onChange={e => setForm({...form, allergicTo: e.target.value})}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-600 block mb-1">Onset Date</label>
+                                    <input 
+                                        type="date"
+                                        className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500"
+                                        value={form.onsetDate}
+                                        onChange={e => setForm({...form, onsetDate: e.target.value})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-600 block mb-1">Allergy Status</label>
+                                    <select 
+                                        className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500 bg-white"
+                                        value={form.allergyStatus}
+                                        onChange={e => setForm({...form, allergyStatus: e.target.value})}
+                                    >
+                                        <option>Active</option>
+                                        <option>Resolved</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-600 block mb-1">Resolved Date</label>
+                                    <input 
+                                        type="date"
+                                        className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500"
+                                        disabled={form.allergyStatus !== 'Resolved'}
+                                        value={form.resolvedDate}
+                                        onChange={e => setForm({...form, resolvedDate: e.target.value})}
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-bold text-slate-600 block mb-1">Reactions</label>
+                                <div className="border border-slate-300 rounded h-32 overflow-y-auto p-2 bg-slate-50">
+                                    <div className="grid grid-cols-1 gap-1">
+                                        {ALLERGY_REACTIONS.map(r => (
+                                            <label key={r} className="flex items-center gap-2 text-sm text-slate-700 hover:bg-white p-1 rounded cursor-pointer">
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                    checked={selectedReactions.includes(r)}
+                                                    onChange={() => toggleReaction(r)}
+                                                />
+                                                {r}
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-bold text-slate-600 block mb-1">Remarks</label>
+                                <textarea 
+                                    className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500 h-20 resize-none"
+                                    value={form.remarks}
+                                    onChange={e => setForm({...form, remarks: e.target.value})}
+                                ></textarea>
+                            </div>
+                        </div>
+
+                        <div className="p-4 border-t border-slate-200 mt-auto flex justify-end gap-3">
+                            <button onClick={onClose} className="px-5 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-medium hover:bg-white hover:border-slate-400 transition-colors">
+                                Cancel
+                            </button>
+                            <button 
+                                onClick={handleSave} 
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-bold shadow-md shadow-blue-200 transition-all"
+                            >
+                                Save Allergy
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -202,13 +445,14 @@ const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, o
 export const Consultation = () => {
     const { appointmentId } = useParams();
     const navigate = useNavigate();
-    const { appointments, patients, employees, departments, clinicalNotes, saveClinicalNote, updateAppointment, showToast } = useData();
+    const { appointments, patients, employees, departments, clinicalNotes, saveClinicalNote, updateAppointment, showToast, allergies } = useData();
 
     const [activeSection, setActiveSection] = useState('Chief Complaint');
     const [noteContent, setNoteContent] = useState('');
     const [lastEdited, setLastEdited] = useState<string | null>(null);
     const [saveStatus, setSaveStatus] = useState<'Saved' | 'Saving...' | 'Unsaved changes'>('Saved');
     const [showVitalsModal, setShowVitalsModal] = useState(false);
+    const [showAllergyModal, setShowAllergyModal] = useState(false);
     
     const editorRef = useRef<HTMLDivElement>(null);
     const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -220,11 +464,9 @@ export const Consultation = () => {
 
     // --- Effects ---
     
-    // Load content when section changes
     useEffect(() => {
         if (!appointmentId) return;
         
-        // Clear any pending auto-saves from previous section to avoid overwrite
         if (autoSaveTimerRef.current) {
             clearTimeout(autoSaveTimerRef.current);
         }
@@ -241,19 +483,21 @@ export const Consultation = () => {
         }
     }, [activeSection, appointmentId, clinicalNotes]);
 
-    // Handle key shortcuts like F7
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'F7') {
                 e.preventDefault();
                 setShowVitalsModal(true);
             }
+            if (e.key === 'F8') {
+                e.preventDefault();
+                setShowAllergyModal(true);
+            }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
-    // --- Helper: Perform Save ---
     const executeSave = async (content: string, section: string) => {
         if (!appointmentId) return;
         
@@ -270,18 +514,15 @@ export const Consultation = () => {
         setLastEdited(new Date().toLocaleTimeString());
     };
 
-    // --- Handlers ---
     const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
         const newContent = e.currentTarget.innerHTML;
         setNoteContent(newContent);
         setSaveStatus('Unsaved changes');
 
-        // Clear existing timer
         if (autoSaveTimerRef.current) {
             clearTimeout(autoSaveTimerRef.current);
         }
 
-        // Set new timer for Auto-Save (2 seconds debounce)
         autoSaveTimerRef.current = setTimeout(() => {
             executeSave(newContent, activeSection);
         }, 2000);
@@ -293,7 +534,6 @@ export const Consultation = () => {
     };
 
     const handleManualSave = () => {
-        // Cancel auto-save timer since we are saving manually now
         if (autoSaveTimerRef.current) {
             clearTimeout(autoSaveTimerRef.current);
         }
@@ -302,7 +542,6 @@ export const Consultation = () => {
 
     const handleEndEncounter = () => {
         if (!appointmentId) return;
-        // Ensure current note is saved before leaving
         if (saveStatus === 'Unsaved changes') {
             handleManualSave();
         }
@@ -324,6 +563,8 @@ export const Consultation = () => {
     const handleToolClick = (toolId: string) => {
         if (toolId === 'Vitals') {
             setShowVitalsModal(true);
+        } else if (toolId === 'Allergy') {
+            setShowAllergyModal(true);
         } else {
             showToast('info', `${toolId} module coming soon.`);
         }
@@ -341,9 +582,13 @@ export const Consultation = () => {
     }
 
     const age = new Date().getFullYear() - new Date(patient.dob).getFullYear();
+    
+    // Allergy Logic for Banner
+    const patientAllergies = allergies.filter(a => a.patientId === patient.id);
+    const activeAllergiesCount = patientAllergies.filter(a => a.status === 'Active' && a.allergyType !== 'NKA').length;
+    const isNKA = patientAllergies.some(a => a.allergyType === 'NKA');
 
     return (
-        // Main Container: Fixed Full Screen, No Window Scroll
         <div className="fixed inset-0 z-50 flex flex-col bg-slate-100 font-sans text-sm overflow-hidden">
             
             {/* 1. TOP HEADER: System Info */}
@@ -371,12 +616,9 @@ export const Consultation = () => {
             {/* 2. PATIENT BANNER: High Contrast */}
             <div className="bg-gradient-to-r from-slate-800 to-slate-900 text-white p-3 shrink-0 shadow-md z-20">
                 <div className="flex items-center gap-4">
-                    {/* Avatar */}
                     <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center border border-white/20 shrink-0">
                         <span className="text-lg font-bold text-white">{patient.firstName[0]}{patient.lastName[0]}</span>
                     </div>
-
-                    {/* Info Grid */}
                     <div className="flex-1 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-6 gap-y-1 items-center">
                         <div>
                             <span className="text-slate-400 text-[10px] uppercase font-bold block">Patient Name</span>
@@ -401,11 +643,19 @@ export const Consultation = () => {
                             <span className="text-xs text-slate-300 italic block">No active insurance package linked</span>
                         </div>
                     </div>
-
-                    {/* Quick Alerts */}
                     <div className="flex flex-col gap-1 shrink-0">
-                        <button className="bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-500/50 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-colors">
-                            <Bell className="w-3 h-3" /> Allergies
+                        <button 
+                            onClick={() => setShowAllergyModal(true)} 
+                            className={`px-3 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition-colors border
+                                ${activeAllergiesCount > 0 
+                                    ? 'bg-red-600 text-white border-red-700 shadow-sm animate-pulse' 
+                                    : isNKA 
+                                        ? 'bg-green-600 text-white border-green-700 shadow-sm' 
+                                        : 'bg-red-500/20 hover:bg-red-500/30 text-red-200 border-red-500/50'
+                                }`}
+                        >
+                            <Bell className="w-3 h-3" /> 
+                            {activeAllergiesCount > 0 ? `${activeAllergiesCount} Allergies` : (isNKA ? 'NKA' : 'Allergies')}
                         </button>
                         <button className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 border border-blue-500/50 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-colors">
                             <Info className="w-3 h-3" /> Alerts
@@ -430,8 +680,6 @@ export const Consultation = () => {
 
             {/* 4. MAIN WORKSPACE: Sidebar + Editor */}
             <div className="flex flex-1 overflow-hidden relative">
-                
-                {/* Sidebar Navigation */}
                 <div className="w-64 bg-slate-50 border-r border-slate-200 flex flex-col shrink-0">
                     <div className="p-3 bg-slate-100 border-b border-slate-200">
                         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Clinical Sections</h3>
@@ -452,7 +700,6 @@ export const Consultation = () => {
                             </button>
                         ))}
                     </div>
-                    {/* Status Checkboxes */}
                     <div className="p-4 bg-slate-100 border-t border-slate-200">
                         <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer mb-2">
                             <input type="checkbox" className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
@@ -465,17 +712,13 @@ export const Consultation = () => {
                     </div>
                 </div>
 
-                {/* Editor Area */}
                 <div className="flex-1 flex flex-col bg-white min-w-0">
-                    
-                    {/* Editor Header */}
                     <div className="h-10 bg-slate-50 border-b border-slate-200 flex items-center justify-between px-4 shrink-0">
                         <span className="font-bold text-slate-700 text-sm">{activeSection}</span>
                         <div className="flex items-center gap-2">
                             {saveStatus === 'Saving...' && <Loader2 className="w-3 h-3 animate-spin text-blue-500" />}
                             {saveStatus === 'Saved' && <CheckCircle className="w-3 h-3 text-green-500" />}
                             {saveStatus === 'Unsaved changes' && <Cloud className="w-3 h-3 text-orange-400" />}
-                            
                             <span className={`text-[10px] font-medium ${
                                 saveStatus === 'Unsaved changes' ? 'text-orange-500' : 'text-slate-400'
                             }`}>
@@ -486,7 +729,6 @@ export const Consultation = () => {
                         </div>
                     </div>
 
-                    {/* Formatting Toolbar */}
                     <div className="p-2 border-b border-slate-200 flex items-center gap-1 shrink-0 bg-white">
                         <div className="flex items-center bg-slate-100 rounded-lg p-0.5 border border-slate-200">
                             <button onClick={() => execCommand('bold')} className="p-1.5 hover:bg-white hover:shadow-sm rounded text-slate-700 transition-all" title="Bold">
@@ -514,7 +756,6 @@ export const Consultation = () => {
                          </button>
                     </div>
 
-                    {/* Text Area */}
                     <div className="flex-1 overflow-y-auto bg-slate-50/50 p-6 cursor-text" onClick={() => editorRef.current?.focus()}>
                         <div className="max-w-4xl mx-auto bg-white min-h-[500px] shadow-sm border border-slate-200 rounded-sm p-8">
                             <div
@@ -527,7 +768,6 @@ export const Consultation = () => {
                         </div>
                     </div>
 
-                    {/* Bottom Save Bar for Section */}
                     <div className="p-3 border-t border-slate-200 bg-white flex justify-between items-center shrink-0">
                          <div className="flex items-center gap-2">
                              <label className="text-xs text-slate-500 font-medium">Quick Template:</label>
@@ -577,6 +817,11 @@ export const Consultation = () => {
             {/* Vitals Modal */}
             {showVitalsModal && appointmentId && (
                 <VitalsEntryModal appointmentId={appointmentId} onClose={() => setShowVitalsModal(false)} />
+            )}
+
+            {/* Allergy Modal */}
+            {showAllergyModal && appointmentId && patient && (
+                <AllergyEntryModal patientId={patient.id} onClose={() => setShowAllergyModal(false)} />
             )}
 
         </div>

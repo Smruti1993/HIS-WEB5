@@ -49,6 +49,7 @@ interface DataContextType {
   saveVitalSign: (vital: VitalSign) => void;
   saveDiagnosis: (diagnosis: Diagnosis) => void;
   saveClinicalNote: (note: ClinicalNote) => void;
+  saveAllergy: (allergy: Allergy) => void;
   
   toasts: ToastMessage[];
   showToast: (type: 'success' | 'error' | 'info', message: string) => void;
@@ -159,7 +160,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   });
 
   const mapAllergyFromDb = (a: any): Allergy => ({
-    id: a.id, patientId: a.patient_id, allergen: a.allergen, severity: a.severity, reaction: a.reaction, status: a.status
+    id: a.id, patientId: a.patient_id, allergen: a.allergen, severity: a.severity, reaction: a.reaction, status: a.status,
+    allergyType: a.allergy_type, onsetDate: a.onset_date, resolvedDate: a.resolved_date, remarks: a.remarks
+  });
+  const mapAllergyToDb = (a: any) => ({
+    id: a.id, patient_id: a.patientId, allergen: a.allergen, severity: a.severity, reaction: a.reaction, status: a.status,
+    allergy_type: a.allergyType, onset_date: a.onsetDate, resolved_date: a.resolvedDate, remarks: a.remarks
   });
 
   // --- Initial Fetch ---
@@ -441,8 +447,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const saveVitalSign = async (vital: VitalSign) => {
       if (!requireDb()) return;
       
-      // Upsert into local state (replace if same appointment exists for simplicity, though normally allows history)
-      // For this simplified version, we just append or update based on ID
       setVitals(prev => {
           const exists = prev.find(v => v.id === vital.id);
           if (exists) return prev.map(v => v.id === vital.id ? vital : v);
@@ -467,7 +471,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const saveClinicalNote = async (note: ClinicalNote) => {
       if (!requireDb()) return;
       
-      // Update local state if exists, else add
       setClinicalNotes(prev => {
           const existing = prev.find(n => n.appointmentId === note.appointmentId && n.noteType === note.noteType);
           if (existing) {
@@ -476,10 +479,21 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           return [...prev, note];
       });
 
-      // Upsert to DB
       const { error } = await getSupabase().from('clinical_notes').upsert(mapNoteToDb(note));
       if (error) showToast('error', 'Failed to save note.');
       else showToast('success', 'Note saved.');
+  };
+
+  const saveAllergy = async (allergy: Allergy) => {
+      if (!requireDb()) return;
+      
+      setAllergies(prev => [...prev, allergy]);
+      const { error } = await getSupabase().from('clinical_allergies').insert(mapAllergyToDb(allergy));
+      if (error) { 
+          showToast('error', 'Failed to save allergy'); 
+          setAllergies(prev => prev.filter(a => a.id !== allergy.id)); 
+      }
+      else showToast('success', 'Allergy recorded.');
   };
 
   return (
@@ -492,7 +506,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       availabilities, saveAvailability, deleteAvailability,
       appointments, bookAppointment, updateAppointment, cancelAppointment,
       bills, createBill, addPayment,
-      vitals, diagnoses, clinicalNotes, allergies, saveVitalSign, saveDiagnosis, saveClinicalNote,
+      vitals, diagnoses, clinicalNotes, allergies, saveVitalSign, saveDiagnosis, saveClinicalNote, saveAllergy,
       toasts, showToast, removeToast,
       isLoading, isDbConnected, updateDbConnection, disconnectDb
     }}>

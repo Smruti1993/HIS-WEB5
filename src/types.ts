@@ -139,9 +139,13 @@ export interface Allergy {
   id: string;
   patientId: string;
   allergen: string;
+  allergyType: string; // 'Drug', 'Food', etc.
   severity: string;
   reaction?: string;
   status: 'Active' | 'Resolved';
+  onsetDate?: string;
+  resolvedDate?: string;
+  remarks?: string;
 }
 
 export interface ToastMessage {

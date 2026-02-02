@@ -11,6 +11,13 @@ ALTER TABLE appointments ADD COLUMN IF NOT EXISTS payment_mode TEXT DEFAULT 'CAS
 -- Fix for Clinical Diagnoses table missing icd_code
 ALTER TABLE clinical_diagnoses ADD COLUMN IF NOT EXISTS icd_code TEXT;
 
+-- Fix for Clinical Allergies table to support detailed form
+ALTER TABLE clinical_allergies ADD COLUMN IF NOT EXISTS allergy_type TEXT;
+ALTER TABLE clinical_allergies ADD COLUMN IF NOT EXISTS onset_date DATE;
+ALTER TABLE clinical_allergies ADD COLUMN IF NOT EXISTS resolved_date DATE;
+ALTER TABLE clinical_allergies ADD COLUMN IF NOT EXISTS remarks TEXT;
+-- Note: 'reaction' column already exists, we will store comma-separated values or JSON string there.
+
 -- ==========================================
 -- 1. Master Data Tables
 -- ==========================================
@@ -139,10 +146,13 @@ CREATE TABLE IF NOT EXISTS clinical_vitals (
     temperature NUMERIC(4, 1),
     pulse INTEGER,
     respiratory_rate INTEGER,
-    weight NUMERIC(5, 2),
+    map NUMERIC(5, 2), -- Mean Arterial Pressure
+    spo2 INTEGER,      -- Oxygen Saturation
     height NUMERIC(5, 2),
+    weight NUMERIC(5, 2),
     bmi NUMERIC(4, 1),
-    spo2 INTEGER
+    tobacco_use TEXT,
+    row_remarks JSONB  -- Stores remarks for specific rows (e.g. {"temperature": "High"})
 );
 
 CREATE TABLE IF NOT EXISTS clinical_diagnoses (
@@ -159,9 +169,13 @@ CREATE TABLE IF NOT EXISTS clinical_allergies (
     id TEXT PRIMARY KEY,
     patient_id TEXT REFERENCES patients(id) ON DELETE CASCADE,
     allergen TEXT NOT NULL,
+    allergy_type TEXT, -- 'Drug', 'Food', 'Environmental', 'NonFormulaDrug'
     severity TEXT, -- 'Mild', 'Moderate', 'Severe'
-    reaction TEXT,
+    reaction TEXT, -- Stores multiple reactions
     status TEXT DEFAULT 'Active',
+    onset_date DATE,
+    resolved_date DATE,
+    remarks TEXT,
     recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -185,6 +199,7 @@ CREATE INDEX IF NOT EXISTS idx_bills_patient ON bills(patient_id);
 CREATE INDEX IF NOT EXISTS idx_clinical_notes_appt ON clinical_notes(appointment_id);
 CREATE INDEX IF NOT EXISTS idx_clinical_vitals_appt ON clinical_vitals(appointment_id);
 CREATE INDEX IF NOT EXISTS idx_clinical_diagnoses_appt ON clinical_diagnoses(appointment_id);
+CREATE INDEX IF NOT EXISTS idx_clinical_allergies_patient ON clinical_allergies(patient_id);
 CREATE INDEX IF NOT EXISTS idx_patients_name ON patients(last_name);
 CREATE INDEX IF NOT EXISTS idx_employees_dept ON employees(department_id);
 
