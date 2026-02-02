@@ -119,76 +119,79 @@ const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, o
     ];
 
     return (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl overflow-hidden animate-in zoom-in-95 duration-200">
-                <div className="bg-slate-700 px-4 py-3 flex justify-between items-center text-white">
-                    <h3 className="font-bold text-lg flex items-center gap-2">
-                        <Activity className="w-5 h-5" /> Vital Signs
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[85vh] overflow-hidden animate-in zoom-in-95 duration-200">
+                {/* Header */}
+                <div className="bg-slate-800 px-5 py-3 flex justify-between items-center text-white shrink-0">
+                    <h3 className="font-bold text-base flex items-center gap-2">
+                        <Activity className="w-5 h-5 text-blue-400" /> Record Vital Signs
                     </h3>
-                    <button onClick={onClose} className="hover:text-red-300 transition-colors">
-                        <XCircle className="w-6 h-6" />
+                    <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+                        <XCircle className="w-5 h-5" />
                     </button>
                 </div>
                 
-                <div className="p-1 bg-slate-100">
-                    <div className="bg-white border border-slate-300">
-                        <table className="w-full text-sm border-collapse">
-                            <thead>
-                                <tr className="bg-slate-200 text-slate-700">
-                                    <th className="border border-slate-300 px-3 py-2 text-left font-bold w-1/4">Vital signs</th>
-                                    <th className="border border-slate-300 px-3 py-2 text-left font-bold w-1/6">Current Value</th>
-                                    <th className="border border-slate-300 px-3 py-2 text-left font-bold w-1/12">Unit</th>
-                                    <th className="border border-slate-300 px-3 py-2 text-left font-bold w-1/5">Reference Range</th>
-                                    <th className="border border-slate-300 px-3 py-2 text-left font-bold">Remarks</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {rows.map((row, idx) => (
-                                    <tr key={row.key} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                                        <td className="border border-slate-300 px-3 py-1.5 font-medium text-slate-800">
-                                            {row.label}
-                                        </td>
-                                        <td className="border border-slate-300 px-1 py-1">
-                                            <div className="flex items-center">
-                                                <input 
-                                                    type={row.key === 'tobacco' ? 'text' : 'number'}
-                                                    step="0.1"
-                                                    className={`w-full border border-slate-300 px-2 py-1 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm ${row.isCalc ? 'bg-slate-100 text-slate-600' : ''}`}
-                                                    value={(formData as any)[row.key]}
-                                                    readOnly={row.isCalc}
-                                                    onChange={e => setFormData({...formData, [row.key]: e.target.value})}
-                                                />
-                                                {row.isCalc && <Calculator className="w-4 h-4 ml-1 text-blue-500 opacity-70" />}
-                                            </div>
-                                        </td>
-                                        <td className="border border-slate-300 px-3 py-1.5 text-slate-500">{row.unit}</td>
-                                        <td className="border border-slate-300 px-3 py-1.5 text-slate-500">{row.range}</td>
-                                        <td className="border border-slate-300 px-1 py-1">
+                {/* Scrollable Content */}
+                <div className="flex-1 overflow-y-auto p-0">
+                    <table className="w-full text-sm border-collapse">
+                        <thead className="bg-slate-100 text-slate-600 sticky top-0 z-10 shadow-sm text-xs uppercase">
+                            <tr>
+                                <th className="px-4 py-3 font-semibold text-left w-[25%] border-b border-slate-200">Vital Sign</th>
+                                <th className="px-4 py-3 font-semibold text-left w-[20%] border-b border-slate-200">Value</th>
+                                <th className="px-4 py-3 font-semibold text-left w-[10%] border-b border-slate-200">Unit</th>
+                                <th className="px-4 py-3 font-semibold text-left w-[20%] border-b border-slate-200 hidden sm:table-cell">Ref. Range</th>
+                                <th className="px-4 py-3 font-semibold text-left border-b border-slate-200">Remarks</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {rows.map((row, idx) => (
+                                <tr key={row.key} className="hover:bg-slate-50 transition-colors">
+                                    <td className="px-4 py-2.5 font-medium text-slate-700">
+                                        {row.label}
+                                    </td>
+                                    <td className="px-4 py-2.5">
+                                        <div className="relative">
                                             <input 
-                                                className="w-full border border-slate-300 px-2 py-1 outline-none focus:border-blue-500 text-sm"
-                                                value={formData.remarks[row.key] || ''}
-                                                onChange={e => handleRemarkChange(row.key, e.target.value)}
+                                                type={row.key === 'tobacco' ? 'text' : 'number'}
+                                                step="0.1"
+                                                className={`w-full border border-slate-300 rounded px-2 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all ${row.isCalc ? 'bg-slate-50 text-slate-500 font-semibold' : ''}`}
+                                                value={(formData as any)[row.key]}
+                                                readOnly={row.isCalc}
+                                                placeholder={row.isCalc ? 'Auto' : '-'}
+                                                onChange={e => setFormData({...formData, [row.key]: e.target.value})}
                                             />
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                            {row.isCalc && <Calculator className="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />}
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-xs text-slate-500">{row.unit}</td>
+                                    <td className="px-4 py-2.5 text-xs text-slate-500 hidden sm:table-cell">{row.range}</td>
+                                    <td className="px-4 py-2.5">
+                                        <input 
+                                            className="w-full border-b border-transparent hover:border-slate-300 focus:border-blue-500 px-1 py-1 text-sm outline-none bg-transparent transition-colors placeholder-slate-300"
+                                            placeholder="Add remark..."
+                                            value={formData.remarks[row.key] || ''}
+                                            onChange={e => handleRemarkChange(row.key, e.target.value)}
+                                        />
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
 
-                <div className="p-4 bg-slate-100 flex gap-3 border-t border-slate-200">
-                    <button 
-                        onClick={handleSave}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded text-sm font-bold shadow-sm transition-colors"
-                    >
-                        Save Vital Sign
-                    </button>
+                {/* Footer */}
+                <div className="p-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-200 shrink-0">
                     <button 
                         onClick={onClose}
-                        className="bg-slate-500 hover:bg-slate-600 text-white px-6 py-2 rounded text-sm font-bold shadow-sm transition-colors"
+                        className="px-5 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-medium hover:bg-white hover:border-slate-400 transition-colors"
                     >
-                        Back to Patient List
+                        Cancel
+                    </button>
+                    <button 
+                        onClick={handleSave}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-bold shadow-md shadow-blue-200 transition-all flex items-center gap-2"
+                    >
+                        <Save className="w-4 h-4" /> Save Vitals
                     </button>
                 </div>
             </div>
