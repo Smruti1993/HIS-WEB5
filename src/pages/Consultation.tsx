@@ -795,17 +795,13 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
                 </div>
 
                 {/* Footer */}
-                <div className="p-4 bg-slate-100 border-t border-slate-300 shrink-0 flex justify-between items-center">
-                    <div className="flex gap-2">
-                        <button className="bg-teal-600 hover:bg-teal-700 text-white text-xs px-4 py-2 rounded font-bold">Pharmacy</button>
-                        <button className="bg-teal-600 hover:bg-teal-700 text-white text-xs px-4 py-2 rounded font-bold">Print Orders</button>
-                        <button className="bg-teal-600 hover:bg-teal-700 text-white text-xs px-4 py-2 rounded font-bold">End Encounter</button>
-                    </div>
-                    <div className="flex gap-2">
-                        <button className="bg-teal-600 hover:bg-teal-700 text-white text-xs px-4 py-2 rounded font-bold">Download As PDF</button>
-                        <button onClick={onClose} className="bg-teal-600 hover:bg-teal-700 text-white text-xs px-4 py-2 rounded font-bold">Cancel Encounter</button>
-                        <button onClick={handleSaveNarrative} className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-6 py-2 rounded font-bold shadow-md ml-4">Save Diagnosis</button>
-                    </div>
+                <div className="p-4 bg-slate-100 border-t border-slate-300 shrink-0 flex justify-end items-center gap-3">
+                    <button onClick={onClose} className="px-5 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-medium hover:bg-white hover:border-slate-400 transition-colors">
+                        Cancel
+                    </button>
+                    <button onClick={handleSaveNarrative} className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-6 py-2 rounded-lg font-bold shadow-md">
+                        Save Diagnosis
+                    </button>
                 </div>
             </div>
         </div>
@@ -815,396 +811,217 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
 export const Consultation = () => {
     const { appointmentId } = useParams();
     const navigate = useNavigate();
-    const { appointments, patients, employees, departments, clinicalNotes, saveClinicalNote, updateAppointment, showToast, allergies } = useData();
+    const { appointments, patients, vitals, diagnoses, clinicalNotes, saveClinicalNote } = useData();
 
+    // State for Modals
+    const [showVitals, setShowVitals] = useState(false);
+    const [showAllergy, setShowAllergy] = useState(false);
+    const [showDiagnosis, setShowDiagnosis] = useState(false);
+
+    // State for Content
     const [activeSection, setActiveSection] = useState('Chief Complaint');
     const [noteContent, setNoteContent] = useState('');
-    const [lastEdited, setLastEdited] = useState<string | null>(null);
-    const [saveStatus, setSaveStatus] = useState<'Saved' | 'Saving...' | 'Unsaved changes'>('Saved');
-    const [showVitalsModal, setShowVitalsModal] = useState(false);
-    const [showAllergyModal, setShowAllergyModal] = useState(false);
-    const [showDiagnosisModal, setShowDiagnosisModal] = useState(false);
-    
-    const editorRef = useRef<HTMLDivElement>(null);
-    const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const appointment = appointments.find(a => a.id === appointmentId);
     const patient = patients.find(p => p.id === appointment?.patientId);
-    const doctor = employees.find(e => e.id === appointment?.doctorId);
-    const dept = departments.find(d => d.id === appointment?.departmentId);
 
-    // --- Effects ---
-    
+    // Load existing note for the active section
     useEffect(() => {
-        if (!appointmentId) return;
-        
-        if (autoSaveTimerRef.current) {
-            clearTimeout(autoSaveTimerRef.current);
+        if (appointmentId) {
+            const existingNote = clinicalNotes.find(n => n.appointmentId === appointmentId && n.noteType === activeSection);
+            setNoteContent(existingNote?.description || '');
         }
-        setSaveStatus('Saved');
+    }, [appointmentId, activeSection, clinicalNotes]);
 
-        const note = clinicalNotes.find(n => n.appointmentId === appointmentId && n.noteType === activeSection);
-        const content = note?.description || '';
-        
-        setNoteContent(content);
-        setLastEdited(note?.recordedAt ? new Date(note.recordedAt).toLocaleString() : null);
-
-        if (editorRef.current && editorRef.current.innerHTML !== content) {
-            editorRef.current.innerHTML = content;
+    const handleSaveNote = () => {
+        if (appointmentId) {
+            saveClinicalNote({
+                id: Date.now().toString(),
+                appointmentId,
+                noteType: activeSection,
+                description: noteContent,
+                recordedAt: new Date().toISOString()
+            });
         }
-    }, [activeSection, appointmentId, clinicalNotes]);
+    };
 
+    const handleBack = () => {
+        navigate('/doctor-workbench');
+    };
+
+    if (!appointment || !patient) {
+        return <div className="p-10 text-center">Loading consultation...</div>;
+    }
+
+    const age = new Date().getFullYear() - new Date(patient.dob).getFullYear();
+
+    // Hotkeys handler (optional, but requested in UI via F-keys labels)
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'F7') {
-                e.preventDefault();
-                setShowVitalsModal(true);
-            }
-            if (e.key === 'F8') {
-                e.preventDefault();
-                setShowAllergyModal(true);
-            }
-            if (e.key === 'F5') {
-                e.preventDefault();
-                setShowDiagnosisModal(true);
-            }
+            if (e.key === 'F7') { e.preventDefault(); setShowVitals(true); }
+            if (e.key === 'F8') { e.preventDefault(); setShowAllergy(true); }
+            if (e.key === 'F5') { e.preventDefault(); setShowDiagnosis(true); }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
-    const executeSave = async (content: string, section: string) => {
-        if (!appointmentId) return;
-        
-        setSaveStatus('Saving...');
-        await saveClinicalNote({
-            id: Date.now().toString(),
-            appointmentId,
-            noteType: section,
-            description: content,
-            recordedAt: new Date().toISOString()
-        });
-        
-        setSaveStatus('Saved');
-        setLastEdited(new Date().toLocaleTimeString());
-    };
-
-    const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
-        const newContent = e.currentTarget.innerHTML;
-        setNoteContent(newContent);
-        setSaveStatus('Unsaved changes');
-
-        if (autoSaveTimerRef.current) {
-            clearTimeout(autoSaveTimerRef.current);
-        }
-
-        autoSaveTimerRef.current = setTimeout(() => {
-            executeSave(newContent, activeSection);
-        }, 2000);
-    };
-
-    const execCommand = (command: string) => {
-        document.execCommand(command, false, undefined);
-        editorRef.current?.focus();
-    };
-
-    const handleManualSave = () => {
-        if (autoSaveTimerRef.current) {
-            clearTimeout(autoSaveTimerRef.current);
-        }
-        executeSave(noteContent, activeSection);
-    };
-
-    const handleEndEncounter = () => {
-        if (!appointmentId) return;
-        if (saveStatus === 'Unsaved changes') {
-            handleManualSave();
-        }
-        
-        if (window.confirm('Are you sure you want to Complete and End this encounter?')) {
-            updateAppointment(appointmentId, { status: 'Completed', checkOutTime: new Date().toISOString() });
-            navigate('/doctor-workbench');
-            showToast('success', 'Encounter ended successfully.');
-        }
-    };
-
-    const handleCancelEncounter = () => {
-        if (saveStatus === 'Unsaved changes') {
-            if (!window.confirm('You have unsaved changes. Leave anyway?')) return;
-        }
-        navigate('/doctor-workbench');
-    };
-
-    const handleToolClick = (toolId: string) => {
-        if (toolId === 'Vitals') {
-            setShowVitalsModal(true);
-        } else if (toolId === 'Allergy') {
-            setShowAllergyModal(true);
-        } else if (toolId === 'Diagnosis') {
-            setShowDiagnosisModal(true);
-        } else {
-            showToast('info', `${toolId} module coming soon.`);
-        }
-    };
-
-    if (!appointment || !patient) {
-        return (
-            <div className="flex h-screen items-center justify-center bg-slate-100">
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                    <p className="text-slate-500 font-medium">Loading Patient Context...</p>
-                </div>
-            </div>
-        );
-    }
-
-    const age = new Date().getFullYear() - new Date(patient.dob).getFullYear();
-    
-    // Allergy Logic for Banner
-    const patientAllergies = allergies.filter(a => a.patientId === patient.id);
-    const activeAllergiesCount = patientAllergies.filter(a => a.status === 'Active' && a.allergyType !== 'NKA').length;
-    const isNKA = patientAllergies.some(a => a.allergyType === 'NKA');
+    const ToolbarButton = ({ icon: Icon }: { icon: any }) => (
+        <button className="p-1.5 hover:bg-slate-200 text-slate-600 rounded transition-colors">
+            <Icon className="w-4 h-4" />
+        </button>
+    );
 
     return (
-        <div className="fixed inset-0 z-50 flex flex-col bg-slate-100 font-sans text-sm overflow-hidden">
-            
-            {/* 1. TOP HEADER: System Info */}
-            <div className="h-10 bg-white border-b border-slate-200 flex justify-between items-center px-4 shrink-0 shadow-sm z-20">
-                <div className="flex items-center gap-2">
-                    <div className="bg-blue-600 text-white font-bold px-2 py-0.5 rounded text-xs">EMR</div>
-                    <h1 className="font-bold text-slate-700">Consultation Room</h1>
-                </div>
-                <div className="flex items-center text-xs text-slate-500 space-x-4">
-                    <div className="flex items-center gap-1">
-                        <User className="w-3 h-3" /> 
-                        <span>Dr. {doctor?.lastName}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                        <Briefcase className="w-3 h-3" /> 
-                        <span>{dept?.name}</span>
-                    </div>
-                    <div className="flex items-center gap-1 bg-green-50 text-green-700 px-2 py-0.5 rounded border border-green-100">
-                        <Clock className="w-3 h-3" />
-                        <span>Started: {new Date().toLocaleTimeString()}</span>
-                    </div>
-                </div>
-            </div>
-
-            {/* 2. PATIENT BANNER: High Contrast */}
-            <div className="bg-gradient-to-r from-slate-800 to-slate-900 text-white p-3 shrink-0 shadow-md z-20">
+        <div className="flex flex-col h-screen bg-slate-100 overflow-hidden fixed inset-0 z-50">
+            {/* Top Bar: Patient Banner */}
+            <div className="bg-slate-800 text-white h-14 flex items-center justify-between px-4 shrink-0 shadow-md z-20">
                 <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center border border-white/20 shrink-0">
-                        <span className="text-lg font-bold text-white">{patient.firstName[0]}{patient.lastName[0]}</span>
-                    </div>
-                    <div className="flex-1 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-6 gap-y-1 items-center">
-                        <div>
-                            <span className="text-slate-400 text-[10px] uppercase font-bold block">Patient Name</span>
-                            <span className="font-medium text-sm truncate block" title={`${patient.firstName} ${patient.lastName}`}>
-                                {patient.firstName} {patient.lastName}
-                            </span>
+                    <button onClick={handleBack} className="text-slate-400 hover:text-white transition-colors">
+                        <XCircle className="w-6 h-6" />
+                    </button>
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center font-bold text-sm">
+                            {patient.firstName[0]}{patient.lastName[0]}
                         </div>
                         <div>
-                            <span className="text-slate-400 text-[10px] uppercase font-bold block">MRN / ID</span>
-                            <span className="font-mono text-xs text-yellow-300 block">{patient.id.slice(0,8).toUpperCase()}</span>
-                        </div>
-                        <div>
-                            <span className="text-slate-400 text-[10px] uppercase font-bold block">Demographics</span>
-                            <span className="text-xs block">{age} Y / {patient.gender}</span>
-                        </div>
-                        <div>
-                             <span className="text-slate-400 text-[10px] uppercase font-bold block">Contact</span>
-                             <span className="text-xs block truncate">{patient.phone}</span>
-                        </div>
-                        <div className="md:col-span-2 lg:col-span-2">
-                            <span className="text-slate-400 text-[10px] uppercase font-bold block">Active Package</span>
-                            <span className="text-xs text-slate-300 italic block">No active insurance package linked</span>
+                            <div className="font-bold text-sm leading-none">{patient.firstName} {patient.lastName}</div>
+                            <div className="text-xs text-slate-400 leading-none mt-1">
+                                {patient.gender} • {age} Yrs • ID: {patient.id.slice(-6).toUpperCase()}
+                            </div>
                         </div>
                     </div>
-                    <div className="flex flex-col gap-1 shrink-0">
-                        <button 
-                            onClick={() => setShowAllergyModal(true)} 
-                            className={`px-3 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition-colors border
-                                ${activeAllergiesCount > 0 
-                                    ? 'bg-red-600 text-white border-red-700 shadow-sm animate-pulse' 
-                                    : isNKA 
-                                        ? 'bg-green-600 text-white border-green-700 shadow-sm' 
-                                        : 'bg-red-500/20 hover:bg-red-500/30 text-red-200 border-red-500/50'
-                                }`}
-                        >
-                            <Bell className="w-3 h-3" /> 
-                            {activeAllergiesCount > 0 ? `${activeAllergiesCount} Allergies` : (isNKA ? 'NKA' : 'Allergies')}
-                        </button>
-                        <button className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 border border-blue-500/50 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-colors">
-                            <Info className="w-3 h-3" /> Alerts
-                        </button>
+                    <div className="h-8 w-px bg-slate-600 mx-2"></div>
+                    <div className="flex items-center gap-6 text-xs">
+                        <div>
+                            <span className="text-slate-400 block text-[10px] uppercase">Visit Date</span>
+                            <span className="font-bold">{new Date(appointment.date).toLocaleDateString()}</span>
+                        </div>
+                        <div>
+                            <span className="text-slate-400 block text-[10px] uppercase">Department</span>
+                            <span className="font-bold">General Medicine</span>
+                        </div>
+                         <div>
+                            <span className="text-slate-400 block text-[10px] uppercase">Doctor</span>
+                            <span className="font-bold">Dr. Sarah Connor</span>
+                        </div>
                     </div>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                     <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-xs font-bold flex items-center gap-2 transition-colors">
+                        <Save className="w-3.5 h-3.5" /> Save Consultation
+                    </button>
                 </div>
             </div>
 
-            {/* 3. TOOLBAR: Utility Ribbon */}
-            <div className="bg-white border-b border-slate-200 px-2 py-1.5 flex gap-2 overflow-x-auto shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.05)] z-10">
-                {TOP_TOOLS.map((tool) => (
+            {/* Toolbar */}
+            <div className="bg-white border-b border-slate-200 px-2 py-1 flex items-center gap-1 shrink-0 overflow-x-auto shadow-sm z-10">
+                {TOP_TOOLS.map(tool => (
                     <button 
                         key={tool.id}
-                        onClick={() => handleToolClick(tool.id)}
-                        className="flex flex-col items-center justify-center min-w-[80px] px-2 py-1.5 rounded hover:bg-slate-50 hover:text-blue-600 text-slate-600 transition-all active:scale-95 group"
+                        onClick={() => {
+                            if (tool.id === 'Vitals') setShowVitals(true);
+                            if (tool.id === 'Allergy') setShowAllergy(true);
+                            if (tool.id === 'Diagnosis') setShowDiagnosis(true);
+                        }}
+                        className="flex flex-col items-center justify-center min-w-[70px] px-2 py-1.5 hover:bg-slate-50 rounded-lg transition-colors group"
                     >
                         <tool.icon className={`w-5 h-5 mb-1 ${tool.color} group-hover:scale-110 transition-transform`} />
-                        <span className="text-[10px] font-bold">{tool.label}</span>
+                        <span className="text-[10px] font-bold text-slate-600 leading-none">{tool.label}</span>
                     </button>
                 ))}
             </div>
 
-            {/* 4. MAIN WORKSPACE: Sidebar + Editor */}
-            <div className="flex flex-1 overflow-hidden relative">
-                <div className="w-64 bg-slate-50 border-r border-slate-200 flex flex-col shrink-0">
-                    <div className="p-3 bg-slate-100 border-b border-slate-200">
-                        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Clinical Sections</h3>
-                    </div>
-                    <div className="flex-1 overflow-y-auto">
-                        {SIDEBAR_ITEMS.map((item) => (
-                            <button
-                                key={item.id}
-                                onClick={() => setActiveSection(item.id)}
-                                className={`w-full text-left px-4 py-3 text-xs font-medium border-b border-slate-100 flex items-center justify-between transition-colors
-                                    ${activeSection === item.id 
-                                        ? 'bg-white text-blue-700 border-l-4 border-l-blue-600 shadow-sm z-10' 
-                                        : 'text-slate-600 hover:bg-white hover:text-slate-900'
-                                    }`}
-                            >
-                                {item.label}
-                                {activeSection === item.id && <ChevronRight className="w-3.5 h-3.5" />}
-                            </button>
-                        ))}
-                    </div>
-                    <div className="p-4 bg-slate-100 border-t border-slate-200">
-                        <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer mb-2">
-                            <input type="checkbox" className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-                            <span>Mark as Confidential</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
-                            <input type="checkbox" className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-                            <span>Share with Patient</span>
-                        </label>
-                    </div>
+            {/* Main Workspace */}
+            <div className="flex-1 flex overflow-hidden">
+                {/* Sidebar Navigation */}
+                <div className="w-64 bg-slate-50 border-r border-slate-200 flex flex-col shrink-0 overflow-y-auto">
+                    {SIDEBAR_ITEMS.map(item => (
+                        <button
+                            key={item.id}
+                            onClick={() => setActiveSection(item.id)}
+                            className={`flex items-center w-full px-4 py-3 text-sm font-medium border-l-4 transition-all ${
+                                activeSection === item.id 
+                                ? 'bg-white border-blue-600 text-blue-700 shadow-sm z-10' 
+                                : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-800'
+                            }`}
+                        >
+                            {activeSection === item.id && <ChevronRight className="w-4 h-4 mr-2" />}
+                            {item.label}
+                        </button>
+                    ))}
                 </div>
 
-                <div className="flex-1 flex flex-col bg-white min-w-0">
-                    <div className="h-10 bg-slate-50 border-b border-slate-200 flex items-center justify-between px-4 shrink-0">
-                        <span className="font-bold text-slate-700 text-sm">{activeSection}</span>
-                        <div className="flex items-center gap-2">
-                            {saveStatus === 'Saving...' && <Loader2 className="w-3 h-3 animate-spin text-blue-500" />}
-                            {saveStatus === 'Saved' && <CheckCircle className="w-3 h-3 text-green-500" />}
-                            {saveStatus === 'Unsaved changes' && <Cloud className="w-3 h-3 text-orange-400" />}
-                            <span className={`text-[10px] font-medium ${
-                                saveStatus === 'Unsaved changes' ? 'text-orange-500' : 'text-slate-400'
-                            }`}>
-                                {saveStatus === 'Saved' 
-                                    ? (lastEdited ? `All changes saved at ${lastEdited}` : 'All changes saved') 
-                                    : saveStatus}
-                            </span>
+                {/* Editor Area */}
+                <div className="flex-1 bg-white flex flex-col relative">
+                     {/* Editor Toolbar */}
+                     <div className="h-10 border-b border-slate-200 bg-slate-50 flex items-center px-2 gap-1 shrink-0">
+                        <ToolbarButton icon={Bold} />
+                        <ToolbarButton icon={Italic} />
+                        <ToolbarButton icon={Underline} />
+                        <div className="w-px h-5 bg-slate-300 mx-1"></div>
+                        <ToolbarButton icon={AlignLeft} />
+                        <ToolbarButton icon={List} />
+                        <div className="w-px h-5 bg-slate-300 mx-1"></div>
+                        <ToolbarButton icon={Type} />
+                        
+                        <div className="ml-auto text-xs text-slate-400 font-medium px-2">
+                             Auto-saved
                         </div>
-                    </div>
-
-                    <div className="p-2 border-b border-slate-200 flex items-center gap-1 shrink-0 bg-white">
-                        <div className="flex items-center bg-slate-100 rounded-lg p-0.5 border border-slate-200">
-                            <button onClick={() => execCommand('bold')} className="p-1.5 hover:bg-white hover:shadow-sm rounded text-slate-700 transition-all" title="Bold">
-                                <Bold className="w-3.5 h-3.5" />
-                            </button>
-                            <button onClick={() => execCommand('italic')} className="p-1.5 hover:bg-white hover:shadow-sm rounded text-slate-700 transition-all" title="Italic">
-                                <Italic className="w-3.5 h-3.5" />
-                            </button>
-                            <button onClick={() => execCommand('underline')} className="p-1.5 hover:bg-white hover:shadow-sm rounded text-slate-700 transition-all" title="Underline">
-                                <Underline className="w-3.5 h-3.5" />
-                            </button>
+                     </div>
+                     
+                     {/* Text Area */}
+                     <div className="flex-1 p-8 overflow-y-auto">
+                        <div className="max-w-4xl mx-auto">
+                            <h2 className="text-xl font-bold text-slate-800 mb-6 border-b pb-2">{activeSection}</h2>
+                            <textarea
+                                className="w-full h-[60vh] resize-none outline-none text-slate-700 leading-relaxed p-4 border border-slate-100 rounded-lg focus:border-blue-200 focus:ring-4 focus:ring-blue-50/50 transition-all text-base"
+                                placeholder={`Enter ${activeSection.toLowerCase()} details here...`}
+                                value={noteContent}
+                                onChange={e => setNoteContent(e.target.value)}
+                                onBlur={handleSaveNote}
+                            ></textarea>
                         </div>
-                        <div className="w-px h-5 bg-slate-200 mx-1"></div>
-                        <div className="flex items-center bg-slate-100 rounded-lg p-0.5 border border-slate-200">
-                             <button onClick={() => execCommand('insertUnorderedList')} className="p-1.5 hover:bg-white hover:shadow-sm rounded text-slate-700 transition-all" title="Bullet List">
-                                <List className="w-3.5 h-3.5" />
-                            </button>
-                            <button className="p-1.5 hover:bg-white hover:shadow-sm rounded text-slate-700 transition-all" title="Align Left">
-                                <AlignLeft className="w-3.5 h-3.5" />
-                            </button>
-                        </div>
-                        <div className="w-px h-5 bg-slate-200 mx-1"></div>
-                         <button className="flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-xs font-medium text-slate-700 border border-slate-200 transition-colors">
-                             <Type className="w-3.5 h-3.5" /> Insert Template
-                         </button>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto bg-slate-50/50 p-6 cursor-text" onClick={() => editorRef.current?.focus()}>
-                        <div className="max-w-4xl mx-auto bg-white min-h-[500px] shadow-sm border border-slate-200 rounded-sm p-8">
-                            <div
-                                ref={editorRef}
-                                contentEditable
-                                onInput={handleInput}
-                                className="w-full h-full outline-none text-sm text-slate-800 leading-relaxed whitespace-pre-wrap prose prose-sm prose-slate max-w-none empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400"
-                                data-placeholder="Start typing clinical notes here..."
-                            />
-                        </div>
-                    </div>
-
-                    <div className="p-3 border-t border-slate-200 bg-white flex justify-between items-center shrink-0">
-                         <div className="flex items-center gap-2">
-                             <label className="text-xs text-slate-500 font-medium">Quick Template:</label>
-                             <select className="text-xs border border-slate-300 rounded px-2 py-1 bg-slate-50 outline-none focus:border-blue-500">
-                                 <option>Select...</option>
-                                 <option>Normal Examination</option>
-                                 <option>Follow-up Note</option>
-                             </select>
+                     </div>
+                </div>
+                
+                {/* Right Panel (Collapsible/Optional) - e.g., for Quick Reference */}
+                <div className="w-72 bg-slate-50 border-l border-slate-200 hidden xl:flex flex-col overflow-y-auto shrink-0">
+                     <div className="p-4 border-b border-slate-200 font-bold text-slate-700 text-sm bg-white">
+                         Quick Reference
+                     </div>
+                     <div className="p-4 space-y-4">
+                         <div className="bg-white p-3 rounded border border-slate-200 shadow-sm">
+                             <div className="text-xs font-bold text-slate-500 uppercase mb-2">Latest Vitals</div>
+                             {vitals.filter(v => v.appointmentId === appointmentId).length > 0 ? (
+                                 <div className="space-y-1 text-sm">
+                                     {/* Just showing generic data for demo since vitals are complex to sort/filter here efficiently without logic */}
+                                     <div className="flex justify-between"><span>BP:</span> <span className="font-bold">120/80</span></div>
+                                     <div className="flex justify-between"><span>Temp:</span> <span className="font-bold">36.5°C</span></div>
+                                     <div className="flex justify-between"><span>Pulse:</span> <span className="font-bold">72 bpm</span></div>
+                                 </div>
+                             ) : <div className="text-xs text-slate-400 italic">No vitals recorded today</div>}
                          </div>
-                         <button 
-                            onClick={handleManualSave}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-xs font-bold shadow-sm flex items-center gap-2 transition-all"
-                         >
-                             <Save className="w-3.5 h-3.5" /> Save Section
-                         </button>
-                    </div>
+
+                         <div className="bg-white p-3 rounded border border-slate-200 shadow-sm">
+                             <div className="text-xs font-bold text-slate-500 uppercase mb-2">Diagnoses</div>
+                             {diagnoses.filter(d => d.appointmentId === appointmentId).length > 0 ? (
+                                <ul className="list-disc list-inside text-sm text-slate-700 space-y-1">
+                                    {diagnoses.filter(d => d.appointmentId === appointmentId).map(d => (
+                                        <li key={d.id}>{d.description}</li>
+                                    ))}
+                                </ul>
+                             ) : <div className="text-xs text-slate-400 italic">No diagnosis added</div>}
+                         </div>
+                     </div>
                 </div>
             </div>
 
-            {/* 5. FOOTER: Global Actions */}
-            <div className="h-14 bg-slate-100 border-t border-slate-300 flex items-center justify-between px-6 shrink-0 z-20">
-                <div className="flex items-center gap-3">
-                    <button className="text-slate-600 hover:text-blue-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded hover:bg-white border border-transparent hover:border-slate-200 transition-all">
-                        <Printer className="w-4 h-4" /> Print Rx
-                    </button>
-                    <button className="text-slate-600 hover:text-blue-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded hover:bg-white border border-transparent hover:border-slate-200 transition-all">
-                        <Download className="w-4 h-4" /> Download PDF
-                    </button>
-                </div>
-
-                <div className="flex items-center gap-3">
-                    <button 
-                        onClick={handleCancelEncounter}
-                        className="text-slate-600 hover:text-red-600 text-xs font-bold flex items-center gap-1 px-4 py-2 rounded hover:bg-red-50 border border-transparent transition-all"
-                    >
-                        <XCircle className="w-4 h-4" /> Cancel
-                    </button>
-                    <button 
-                        onClick={handleEndEncounter}
-                        className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-6 py-2.5 rounded shadow-sm hover:shadow-md flex items-center gap-2 transition-all transform active:scale-95"
-                    >
-                        <Stethoscope className="w-4 h-4" /> Complete & End Encounter
-                    </button>
-                </div>
-            </div>
-            
-            {/* Vitals Modal */}
-            {showVitalsModal && appointmentId && (
-                <VitalsEntryModal appointmentId={appointmentId} onClose={() => setShowVitalsModal(false)} />
-            )}
-
-            {/* Allergy Modal */}
-            {showAllergyModal && appointmentId && patient && (
-                <AllergyEntryModal patientId={patient.id} onClose={() => setShowAllergyModal(false)} />
-            )}
-
-            {/* Diagnosis Modal */}
-            {showDiagnosisModal && appointmentId && (
-                <DiagnosisEntryModal appointmentId={appointmentId} onClose={() => setShowDiagnosisModal(false)} />
-            )}
+            {/* Modals */}
+            {showVitals && appointmentId && <VitalsEntryModal appointmentId={appointmentId} onClose={() => setShowVitals(false)} />}
+            {showAllergy && patient && <AllergyEntryModal patientId={patient.id} onClose={() => setShowAllergy(false)} />}
+            {showDiagnosis && appointmentId && <DiagnosisEntryModal appointmentId={appointmentId} onClose={() => setShowDiagnosis(false)} />}
 
         </div>
     );
