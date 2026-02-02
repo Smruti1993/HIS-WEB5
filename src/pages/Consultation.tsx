@@ -4,7 +4,7 @@ import { useData } from '../context/DataContext';
 import { 
   User, Info, Save, Printer, FileText, Bell, Activity, Stethoscope, Briefcase, 
   Pill, Clock, FileInput, ChevronRight, ChevronDown, 
-  Bold, Italic, Underline, List, AlignLeft, Type, Download, XCircle, Cloud, CheckCircle, Loader2, Calculator, Plus, Trash2, Search, RotateCcw, History
+  Bold, Italic, Underline, List, AlignLeft, Type, Download, XCircle, Cloud, CheckCircle, Loader2, Calculator, Plus, Trash2, Search, RotateCcw, History, AlertTriangle
 } from 'lucide-react';
 import { VitalSign, Allergy, Diagnosis } from '../types';
 
@@ -816,7 +816,7 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
 export const Consultation = () => {
   const { appointmentId } = useParams<{ appointmentId: string }>();
   const navigate = useNavigate();
-  const { appointments, patients, vitals, updateAppointment, clinicalNotes, saveClinicalNote } = useData();
+  const { appointments, patients, vitals, updateAppointment, clinicalNotes, saveClinicalNote, employees, departments, allergies } = useData();
   
   const [activeSection, setActiveSection] = useState('Chief Complaint');
   
@@ -827,11 +827,18 @@ export const Consultation = () => {
   
   const appointment = appointments.find(a => a.id === appointmentId);
   const patient = patients.find(p => p.id === appointment?.patientId);
+  
+  // Derived data
+  const employee = employees.find(e => e.id === appointment?.doctorId);
+  const department = departments.find(d => d.id === appointment?.departmentId);
+  const activeAllergiesCount = allergies.filter(a => a.patientId === patient?.id && a.status === 'Active').length;
 
   // If not found, handle gracefully (redirect or show error)
   if (!appointment || !patient) {
       return <div className="p-10 text-center">Loading or Appointment not found...</div>;
   }
+
+  const age = new Date().getFullYear() - new Date(patient.dob).getFullYear();
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -886,37 +893,70 @@ export const Consultation = () => {
 
         {/* Main Content */}
         <div className="flex-1 flex flex-col min-w-0">
-            {/* Top Header with Tools */}
-            <div className="bg-white border-b border-slate-200 shadow-sm shrink-0">
-                {/* Patient Banner */}
-                <div className="px-6 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                    <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold">
-                            {patient.firstName[0]}{patient.lastName[0]}
-                        </div>
-                        <div>
-                            <h2 className="text-lg font-bold text-slate-800">{patient.firstName} {patient.lastName}</h2>
-                            <p className="text-xs text-slate-500 flex gap-2">
-                                <span>{new Date().getFullYear() - new Date(patient.dob).getFullYear()} Yrs / {patient.gender}</span>
-                                <span>•</span>
-                                <span className="font-mono">ID: {patient.id.slice(-6)}</span>
-                                <span>•</span>
-                                <span className="text-blue-600">{appointment.visitType || 'New Visit'}</span>
-                            </p>
-                        </div>
-                    </div>
-                    <div className="flex gap-2">
-                        <button className="bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded text-xs font-bold hover:bg-slate-50 flex items-center gap-1">
-                            <History className="w-3.5 h-3.5" /> Previous Visits
-                        </button>
-                        <button onClick={handleComplete} className="bg-green-600 text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-green-700 shadow-sm flex items-center gap-1">
-                            <CheckCircle className="w-3.5 h-3.5" /> Complete Consult
-                        </button>
+            
+            {/* Top Bar (White) */}
+            <div className="bg-white px-6 py-2 border-b border-slate-200 flex justify-between items-center shrink-0 shadow-sm z-10">
+                <div className="flex items-center gap-3">
+                    <span className="bg-blue-600 text-white text-xs font-extrabold px-2 py-1 rounded">EMR</span>
+                    <h1 className="text-lg font-bold text-slate-800">Consultation Room</h1>
+                </div>
+                <div className="flex items-center gap-6 text-sm text-slate-600 font-medium">
+                    <div className="flex items-center gap-1.5"><User className="w-4 h-4 text-slate-400" /> Dr. {employee?.lastName || 'RR'}</div>
+                    <div className="flex items-center gap-1.5"><Briefcase className="w-4 h-4 text-slate-400" /> {(department?.name || 'General').toUpperCase()}</div>
+                    <div className="flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-1 rounded-full border border-green-100 text-xs font-bold">
+                        <Clock className="w-3.5 h-3.5" /> Started: {new Date(appointment.checkInTime || Date.now()).toLocaleTimeString()}
                     </div>
                 </div>
+            </div>
 
-                {/* Toolbar */}
-                <div className="px-4 py-2 flex items-center gap-2 overflow-x-auto">
+            {/* Patient Banner (Dark Blue) */}
+            <div className="bg-slate-900 text-white p-5 shrink-0 shadow-md">
+                <div className="flex items-start justify-between">
+                    <div className="flex gap-5 items-center">
+                        <div className="w-14 h-14 bg-slate-700 rounded-xl flex items-center justify-center text-xl font-bold text-slate-300 border border-slate-600 shadow-inner">
+                            {patient.firstName[0]}{patient.lastName[0]}
+                        </div>
+                        <div className="flex gap-10">
+                            <div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Patient Name</p>
+                                <h2 className="text-lg font-bold text-white uppercase tracking-tight">{patient.firstName} {patient.lastName}</h2>
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">MRN / ID</p>
+                                <p className="text-yellow-400 font-mono font-bold">{patient.id.slice(-8).toUpperCase()}</p>
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Demographics</p>
+                                <p className="font-medium text-slate-100">{age} Y / {patient.gender}</p>
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Contact</p>
+                                <p className="font-medium text-slate-100">{patient.phone}</p>
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Active Package</p>
+                                <p className="text-slate-400 italic text-sm">No active insurance package linked</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="flex flex-col gap-2.5">
+                         <button 
+                            onClick={() => setShowAllergy(true)} 
+                            className="flex items-center justify-center gap-2 bg-[#3f191b] hover:bg-[#5c2427] border border-red-900/50 text-red-100 px-4 py-1.5 rounded-lg text-xs font-bold transition-all w-32 shadow-sm"
+                         >
+                            <Bell className="w-3.5 h-3.5 text-red-400" /> Allergies {activeAllergiesCount > 0 && `(${activeAllergiesCount})`}
+                         </button>
+                         <button className="flex items-center justify-center gap-2 bg-[#172554] hover:bg-[#1e3a8a] border border-blue-900/50 text-blue-100 px-4 py-1.5 rounded-lg text-xs font-bold transition-all w-32 shadow-sm">
+                            <Info className="w-3.5 h-3.5 text-blue-400" /> Alerts
+                         </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Toolbar */}
+            <div className="bg-white border-b border-slate-200 shadow-sm shrink-0 px-4 py-3">
+                <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
                     {TOP_TOOLS.map(tool => {
                         const Icon = tool.icon;
                         return (
@@ -927,15 +967,18 @@ export const Consultation = () => {
                                     if(tool.id === 'Allergy') setShowAllergy(true);
                                     if(tool.id === 'Diagnosis') setShowDiagnosis(true);
                                 }}
-                                className="flex flex-col items-center justify-center min-w-[80px] p-2 hover:bg-slate-50 rounded-lg transition-colors group"
+                                className="flex flex-col items-center justify-center min-w-[70px] p-2 hover:bg-slate-50 rounded-xl transition-all group"
                             >
-                                <div className={`w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center mb-1 group-hover:bg-white group-hover:shadow-sm transition-all border border-slate-200 ${tool.color}`}>
-                                    <Icon className="w-4 h-4" />
-                                </div>
-                                <span className="text-[10px] font-bold text-slate-600">{tool.label}</span>
+                                <Icon className={`w-5 h-5 mb-1.5 ${tool.color} group-hover:scale-110 transition-transform`} />
+                                <span className="text-[10px] font-bold text-slate-600 group-hover:text-slate-900">{tool.label.split(' ')[0]}</span>
+                                <span className="text-[9px] text-slate-400 font-medium">{tool.label.split(' ')[1] || ''}</span>
                             </button>
                         )
                     })}
+                    <div className="w-px h-10 bg-slate-200 mx-2"></div>
+                    <button onClick={handleComplete} className="ml-auto bg-green-600 text-white px-5 py-2 rounded-lg text-xs font-bold hover:bg-green-700 shadow-sm flex items-center gap-2 transition-transform active:scale-95">
+                        <CheckCircle className="w-4 h-4" /> Complete Consult
+                    </button>
                 </div>
             </div>
 
@@ -949,19 +992,27 @@ export const Consultation = () => {
                     
                     <div className="max-w-4xl">
                         {/* Placeholder for dynamic section content */}
-                        <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg text-yellow-800 text-sm mb-4">
-                            Currently editing: <strong>{activeSection}</strong>. <br/>
-                            Use the tools above or sidebar to navigate.
+                        <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg text-yellow-800 text-sm mb-4 flex items-center gap-3">
+                            <AlertTriangle className="w-5 h-5 text-yellow-600" />
+                            <div>
+                                Currently editing: <strong>{activeSection}</strong>. <br/>
+                                Use the tools above or sidebar to navigate through the clinical workflow.
+                            </div>
                         </div>
 
-                        {/* Example: Simple Text Area for notes for now */}
-                        <textarea 
-                            className="w-full h-64 p-4 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none text-slate-700 leading-relaxed"
-                            placeholder={`Enter details for ${activeSection}...`}
-                        ></textarea>
+                        <div className="mt-4">
+                            <label className="block text-sm font-bold text-slate-700 mb-2">Enter details for {activeSection}...</label>
+                            <textarea 
+                                className="w-full h-64 p-4 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none text-slate-700 leading-relaxed text-sm bg-white shadow-inner"
+                                placeholder={`Type here...`}
+                            ></textarea>
+                        </div>
                         
-                        <div className="mt-4 flex justify-end">
-                            <button className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors">
+                        <div className="mt-6 flex justify-end gap-3">
+                            <button className="px-6 py-2 border border-slate-300 text-slate-600 rounded-lg font-bold text-sm hover:bg-slate-50 transition-colors">
+                                Clear
+                            </button>
+                            <button className="bg-blue-600 text-white px-8 py-2 rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors shadow-md shadow-blue-100">
                                 Save {activeSection}
                             </button>
                         </div>
