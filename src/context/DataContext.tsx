@@ -308,7 +308,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return true;
   };
 
-  // ... (Patient, Employee, Dept, Unit, Service code remains same, shortened for brevity) ...
   const addPatient = async (p: Patient) => {
     if (!requireDb()) return;
     setPatients(prev => [...prev, p]);
@@ -383,7 +382,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const uploadMasterDiagnoses = async (data: MasterDiagnosis[]) => {
       if (!requireDb()) return;
       
-      setMasterDiagnoses(prev => [...prev, ...data]); // Optimistic update
+      setMasterDiagnoses(prev => [...prev, ...data]); 
       const dbData = data.map(d => ({
           id: d.id,
           code: d.code,
@@ -395,8 +394,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       if (error) {
           showToast('error', `Bulk upload failed: ${error.message}`);
-          // Rollback handled by just refreshing page effectively, but strictly we should filter them out
-          // For now, trigger refresh
           setRefreshTrigger(prev => prev + 1);
       } else {
           showToast('success', `${data.length} diagnoses imported successfully.`);
@@ -405,14 +402,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const saveAvailability = async (avail: DoctorAvailability) => {
     if (!requireDb()) return;
-    let previousSchedule: DoctorAvailability | undefined;
     setAvailabilities(prev => {
-      previousSchedule = prev.find(a => a.doctorId === avail.doctorId && a.dayOfWeek === avail.dayOfWeek);
       const filtered = prev.filter(a => !(a.doctorId === avail.doctorId && a.dayOfWeek === avail.dayOfWeek));
       return [...filtered, avail];
     });
     const { error } = await getSupabase().from('doctor_availability').insert(mapAvailToDb(avail));
-    if(error) { showToast('error', `Failed to save schedule: ${error.message}`); /* Rollback omitted for brevity */ }
+    if(error) { showToast('error', `Failed to save schedule: ${error.message}`); }
     else showToast('success', 'Schedule updated.');
   };
 
@@ -451,8 +446,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (error) { showToast('error', 'Failed to cancel.'); setAppointments(prev => prev.map(a => a.id === id ? original : a)); }
     else showToast('success', 'Appointment cancelled.');
   };
-
-  // --- BILLING LOGIC ---
 
   const createBill = async (bill: Bill) => {
       if (!requireDb()) return;
@@ -493,21 +486,15 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       showToast('success', 'Payment recorded.');
   };
 
-  // --- CLINICAL LOGIC ---
-
   const saveVitalSign = async (vital: VitalSign) => {
       if (!requireDb()) return;
-      
       setVitals(prev => {
           const exists = prev.find(v => v.id === vital.id);
           if (exists) return prev.map(v => v.id === vital.id ? vital : v);
           return [...prev, vital];
       });
-
       const { error } = await getSupabase().from('clinical_vitals').upsert(mapVitalToDb(vital));
-      if (error) { 
-          showToast('error', 'Failed to save vitals: ' + error.message); 
-      }
+      if (error) { showToast('error', 'Failed to save vitals: ' + error.message); }
       else showToast('success', 'Vitals captured.');
   };
 
@@ -515,8 +502,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (!requireDb()) return;
       setDiagnoses(prev => [...prev, diagnosis]);
       const { error } = await getSupabase().from('clinical_diagnoses').insert(mapDiagnosisToDb(diagnosis));
-      if (error) { showToast('error', 'Failed to save diagnosis'); setDiagnoses(prev => prev.filter(d => d.id !== diagnosis.id)); }
-      // Removed success toast to allow bulk saving without spamming toasts
+      if (error) { 
+          // Improve error message for common schema issues
+          let msg = error.message;
+          if (msg.includes('icd_code') || msg.includes('is_poa')) msg += " (Please run migration SQL)";
+          showToast('error', `Failed to save diagnosis: ${msg}`); 
+          setDiagnoses(prev => prev.filter(d => d.id !== diagnosis.id)); 
+      }
   };
 
   const deleteDiagnosis = async (id: string) => {
@@ -538,22 +530,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           return [...prev, nd];
       });
       const { error } = await getSupabase().from('clinical_narrative_diagnoses').upsert(mapNarrativeToDb(nd));
-      if (error) {
-          showToast('error', 'Failed to save narrative diagnosis: ' + error.message);
-      }
+      if (error) { showToast('error', 'Failed to save narrative: ' + error.message); }
   };
 
   const saveClinicalNote = async (note: ClinicalNote) => {
       if (!requireDb()) return;
-      
       setClinicalNotes(prev => {
           const existing = prev.find(n => n.appointmentId === note.appointmentId && n.noteType === note.noteType);
-          if (existing) {
-              return prev.map(n => n.id === existing.id ? note : n);
-          }
+          if (existing) { return prev.map(n => n.id === existing.id ? note : n); }
           return [...prev, note];
       });
-
       const { error } = await getSupabase().from('clinical_notes').upsert(mapNoteToDb(note));
       if (error) showToast('error', 'Failed to save note.');
       else showToast('success', 'Note saved.');
@@ -561,15 +547,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const saveAllergy = async (allergy: Allergy) => {
       if (!requireDb()) return;
-      
       setAllergies(prev => [...prev, allergy]);
       const { error } = await getSupabase().from('clinical_allergies').insert(mapAllergyToDb(allergy));
       if (error) { 
-          console.error("Save Allergy Error:", error);
           let userMsg = error.message;
-          if (userMsg.includes('schema cache') || userMsg.includes('allergy_type')) {
-             userMsg = "Database mismatch. Please run 'NOTIFY pgrst, reload schema' in SQL Editor.";
-          }
+          if (userMsg.includes('allergy_type')) userMsg += " (Please run migration SQL)";
           showToast('error', `Failed: ${userMsg}`); 
           setAllergies(prev => prev.filter(a => a.id !== allergy.id)); 
       }
