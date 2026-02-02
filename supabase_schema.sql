@@ -8,6 +8,9 @@ ALTER TABLE appointments ADD COLUMN IF NOT EXISTS check_out_time TIMESTAMP WITH 
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS visit_type TEXT DEFAULT 'New Visit';
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS payment_mode TEXT DEFAULT 'CASH';
 
+-- Fix for Clinical Diagnoses table missing icd_code
+ALTER TABLE clinical_diagnoses ADD COLUMN IF NOT EXISTS icd_code TEXT;
+
 -- ==========================================
 -- 1. Master Data Tables
 -- ==========================================
@@ -145,7 +148,8 @@ CREATE TABLE IF NOT EXISTS clinical_vitals (
 CREATE TABLE IF NOT EXISTS clinical_diagnoses (
     id TEXT PRIMARY KEY,
     appointment_id TEXT REFERENCES appointments(id) ON DELETE CASCADE,
-    code TEXT, -- ICD Code or similar
+    code TEXT, -- Legacy or internal code
+    icd_code TEXT, -- Official ICD Code
     description TEXT NOT NULL,
     type TEXT DEFAULT 'Provisional', -- 'Provisional', 'Final'
     added_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

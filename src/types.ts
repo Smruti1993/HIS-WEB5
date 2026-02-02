@@ -112,12 +112,16 @@ export interface VitalSign {
   height?: number;
   bmi?: number;
   spo2?: number;
+  map?: number; // Mean Arterial Pressure
+  tobaccoUse?: string;
+  rowRemarks?: Record<string, string>; // JSON object for per-row remarks
 }
 
 export interface Diagnosis {
   id: string;
   appointmentId: string;
   code?: string;
+  icdCode?: string;
   description: string;
   type: 'Provisional' | 'Final';
   addedAt: string;

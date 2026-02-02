@@ -4,8 +4,9 @@ import { useData } from '../context/DataContext';
 import { 
   User, Info, Save, Printer, FileText, Bell, Activity, Stethoscope, Briefcase, 
   Pill, Clock, FileInput, ChevronRight, ChevronDown, 
-  Bold, Italic, Underline, List, AlignLeft, Type, Download, XCircle
+  Bold, Italic, Underline, List, AlignLeft, Type, Download, XCircle, Cloud, CheckCircle, Loader2, Calculator
 } from 'lucide-react';
+import { VitalSign } from '../types';
 
 // --- Static Configs ---
 const SIDEBAR_ITEMS = [
@@ -33,6 +34,168 @@ const TOP_TOOLS = [
     { id: 'Referral', label: 'Referral', icon: Briefcase, color: 'text-purple-600' },
 ];
 
+const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, onClose: () => void }) => {
+    const { vitals, saveVitalSign } = useData();
+    const existingVital = vitals.find(v => v.appointmentId === appointmentId);
+
+    // Initial state based on existing record or empty defaults
+    const [formData, setFormData] = useState({
+        temperature: existingVital?.temperature?.toString() || '',
+        sys: existingVital?.bpSystolic?.toString() || '',
+        dia: existingVital?.bpDiastolic?.toString() || '',
+        pulse: existingVital?.pulse?.toString() || '',
+        rr: existingVital?.respiratoryRate?.toString() || '',
+        spo2: existingVital?.spo2?.toString() || '',
+        height: existingVital?.height?.toString() || '',
+        weight: existingVital?.weight?.toString() || '',
+        tobacco: existingVital?.tobaccoUse || '',
+        // Calculated/Derived but editable if needed
+        map: existingVital?.map?.toString() || '',
+        bmi: existingVital?.bmi?.toString() || '',
+        // Remarks
+        remarks: existingVital?.rowRemarks || {} as Record<string, string>
+    });
+
+    // Auto-calculate logic
+    useEffect(() => {
+        const h = parseFloat(formData.height);
+        const w = parseFloat(formData.weight);
+        if (h > 0 && w > 0) {
+            const bmiVal = (w / ((h / 100) * (h / 100))).toFixed(1);
+            setFormData(prev => ({ ...prev, bmi: bmiVal }));
+        }
+    }, [formData.height, formData.weight]);
+
+    useEffect(() => {
+        const sys = parseFloat(formData.sys);
+        const dia = parseFloat(formData.dia);
+        if (sys > 0 && dia > 0) {
+            const mapVal = ((2 * dia + sys) / 3).toFixed(1);
+            setFormData(prev => ({ ...prev, map: mapVal }));
+        }
+    }, [formData.sys, formData.dia]);
+
+    const handleRemarkChange = (key: string, val: string) => {
+        setFormData(prev => ({
+            ...prev,
+            remarks: { ...prev.remarks, [key]: val }
+        }));
+    };
+
+    const handleSave = () => {
+        saveVitalSign({
+            id: existingVital?.id || Date.now().toString(),
+            appointmentId,
+            recordedAt: new Date().toISOString(),
+            temperature: formData.temperature ? parseFloat(formData.temperature) : undefined,
+            bpSystolic: formData.sys ? parseInt(formData.sys) : undefined,
+            bpDiastolic: formData.dia ? parseInt(formData.dia) : undefined,
+            pulse: formData.pulse ? parseInt(formData.pulse) : undefined,
+            respiratoryRate: formData.rr ? parseInt(formData.rr) : undefined,
+            spo2: formData.spo2 ? parseInt(formData.spo2) : undefined,
+            height: formData.height ? parseFloat(formData.height) : undefined,
+            weight: formData.weight ? parseFloat(formData.weight) : undefined,
+            map: formData.map ? parseFloat(formData.map) : undefined,
+            bmi: formData.bmi ? parseFloat(formData.bmi) : undefined,
+            tobaccoUse: formData.tobacco,
+            rowRemarks: formData.remarks
+        });
+        onClose();
+    };
+
+    // Configuration for rows
+    const rows = [
+        { label: 'Temperature', key: 'temperature', unit: '°C', range: '36.5 - 37.4' },
+        { label: 'Intravascular systolic', key: 'sys', unit: 'mmHg', range: '95.0 - 140.0' },
+        { label: 'Intravascular diastolic', key: 'dia', unit: 'mmHg', range: '60.0 - 90.0' },
+        { label: 'Pulse', key: 'pulse', unit: 'bpm', range: '50.0 - 80.0' },
+        { label: 'RR', key: 'rr', unit: 'bpm', range: '12.0 - 20.0' },
+        { label: 'MAP', key: 'map', unit: 'mmHg', range: '60.0 - 110.0', isCalc: true },
+        { label: 'Oxygen Saturation', key: 'spo2', unit: '%', range: '94.0 - 100.0' },
+        { label: 'Height', key: 'height', unit: 'cm', range: '100.0 - 270.0' },
+        { label: 'Weight', key: 'weight', unit: 'kg', range: '55.0 - 80.0' },
+        { label: 'BMI', key: 'bmi', unit: 'kg/m²', range: '18.5 - 24.9', isCalc: true },
+        { label: 'History of tobacco use', key: 'tobacco', unit: '', range: 'Details' },
+    ];
+
+    return (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl overflow-hidden animate-in zoom-in-95 duration-200">
+                <div className="bg-slate-700 px-4 py-3 flex justify-between items-center text-white">
+                    <h3 className="font-bold text-lg flex items-center gap-2">
+                        <Activity className="w-5 h-5" /> Vital Signs
+                    </h3>
+                    <button onClick={onClose} className="hover:text-red-300 transition-colors">
+                        <XCircle className="w-6 h-6" />
+                    </button>
+                </div>
+                
+                <div className="p-1 bg-slate-100">
+                    <div className="bg-white border border-slate-300">
+                        <table className="w-full text-sm border-collapse">
+                            <thead>
+                                <tr className="bg-slate-200 text-slate-700">
+                                    <th className="border border-slate-300 px-3 py-2 text-left font-bold w-1/4">Vital signs</th>
+                                    <th className="border border-slate-300 px-3 py-2 text-left font-bold w-1/6">Current Value</th>
+                                    <th className="border border-slate-300 px-3 py-2 text-left font-bold w-1/12">Unit</th>
+                                    <th className="border border-slate-300 px-3 py-2 text-left font-bold w-1/5">Reference Range</th>
+                                    <th className="border border-slate-300 px-3 py-2 text-left font-bold">Remarks</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {rows.map((row, idx) => (
+                                    <tr key={row.key} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                                        <td className="border border-slate-300 px-3 py-1.5 font-medium text-slate-800">
+                                            {row.label}
+                                        </td>
+                                        <td className="border border-slate-300 px-1 py-1">
+                                            <div className="flex items-center">
+                                                <input 
+                                                    type={row.key === 'tobacco' ? 'text' : 'number'}
+                                                    step="0.1"
+                                                    className={`w-full border border-slate-300 px-2 py-1 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm ${row.isCalc ? 'bg-slate-100 text-slate-600' : ''}`}
+                                                    value={(formData as any)[row.key]}
+                                                    readOnly={row.isCalc}
+                                                    onChange={e => setFormData({...formData, [row.key]: e.target.value})}
+                                                />
+                                                {row.isCalc && <Calculator className="w-4 h-4 ml-1 text-blue-500 opacity-70" />}
+                                            </div>
+                                        </td>
+                                        <td className="border border-slate-300 px-3 py-1.5 text-slate-500">{row.unit}</td>
+                                        <td className="border border-slate-300 px-3 py-1.5 text-slate-500">{row.range}</td>
+                                        <td className="border border-slate-300 px-1 py-1">
+                                            <input 
+                                                className="w-full border border-slate-300 px-2 py-1 outline-none focus:border-blue-500 text-sm"
+                                                value={formData.remarks[row.key] || ''}
+                                                onChange={e => handleRemarkChange(row.key, e.target.value)}
+                                            />
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div className="p-4 bg-slate-100 flex gap-3 border-t border-slate-200">
+                    <button 
+                        onClick={handleSave}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded text-sm font-bold shadow-sm transition-colors"
+                    >
+                        Save Vital Sign
+                    </button>
+                    <button 
+                        onClick={onClose}
+                        className="bg-slate-500 hover:bg-slate-600 text-white px-6 py-2 rounded text-sm font-bold shadow-sm transition-colors"
+                    >
+                        Back to Patient List
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export const Consultation = () => {
     const { appointmentId } = useParams();
     const navigate = useNavigate();
@@ -41,7 +204,11 @@ export const Consultation = () => {
     const [activeSection, setActiveSection] = useState('Chief Complaint');
     const [noteContent, setNoteContent] = useState('');
     const [lastEdited, setLastEdited] = useState<string | null>(null);
+    const [saveStatus, setSaveStatus] = useState<'Saved' | 'Saving...' | 'Unsaved changes'>('Saved');
+    const [showVitalsModal, setShowVitalsModal] = useState(false);
+    
     const editorRef = useRef<HTMLDivElement>(null);
+    const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const appointment = appointments.find(a => a.id === appointmentId);
     const patient = patients.find(p => p.id === appointment?.patientId);
@@ -49,8 +216,17 @@ export const Consultation = () => {
     const dept = departments.find(d => d.id === appointment?.departmentId);
 
     // --- Effects ---
+    
+    // Load content when section changes
     useEffect(() => {
         if (!appointmentId) return;
+        
+        // Clear any pending auto-saves from previous section to avoid overwrite
+        if (autoSaveTimerRef.current) {
+            clearTimeout(autoSaveTimerRef.current);
+        }
+        setSaveStatus('Saved');
+
         const note = clinicalNotes.find(n => n.appointmentId === appointmentId && n.noteType === activeSection);
         const content = note?.description || '';
         
@@ -62,9 +238,50 @@ export const Consultation = () => {
         }
     }, [activeSection, appointmentId, clinicalNotes]);
 
+    // Handle key shortcuts like F7
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'F7') {
+                e.preventDefault();
+                setShowVitalsModal(true);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
+    // --- Helper: Perform Save ---
+    const executeSave = async (content: string, section: string) => {
+        if (!appointmentId) return;
+        
+        setSaveStatus('Saving...');
+        await saveClinicalNote({
+            id: Date.now().toString(),
+            appointmentId,
+            noteType: section,
+            description: content,
+            recordedAt: new Date().toISOString()
+        });
+        
+        setSaveStatus('Saved');
+        setLastEdited(new Date().toLocaleTimeString());
+    };
+
     // --- Handlers ---
     const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
-        setNoteContent(e.currentTarget.innerHTML);
+        const newContent = e.currentTarget.innerHTML;
+        setNoteContent(newContent);
+        setSaveStatus('Unsaved changes');
+
+        // Clear existing timer
+        if (autoSaveTimerRef.current) {
+            clearTimeout(autoSaveTimerRef.current);
+        }
+
+        // Set new timer for Auto-Save (2 seconds debounce)
+        autoSaveTimerRef.current = setTimeout(() => {
+            executeSave(newContent, activeSection);
+        }, 2000);
     };
 
     const execCommand = (command: string) => {
@@ -72,19 +289,21 @@ export const Consultation = () => {
         editorRef.current?.focus();
     };
 
-    const handleSaveNote = () => {
-        if (!appointmentId) return;
-        saveClinicalNote({
-            id: Date.now().toString(),
-            appointmentId,
-            noteType: activeSection,
-            description: noteContent,
-            recordedAt: new Date().toISOString()
-        });
+    const handleManualSave = () => {
+        // Cancel auto-save timer since we are saving manually now
+        if (autoSaveTimerRef.current) {
+            clearTimeout(autoSaveTimerRef.current);
+        }
+        executeSave(noteContent, activeSection);
     };
 
     const handleEndEncounter = () => {
         if (!appointmentId) return;
+        // Ensure current note is saved before leaving
+        if (saveStatus === 'Unsaved changes') {
+            handleManualSave();
+        }
+        
         if (window.confirm('Are you sure you want to Complete and End this encounter?')) {
             updateAppointment(appointmentId, { status: 'Completed', checkOutTime: new Date().toISOString() });
             navigate('/doctor-workbench');
@@ -93,8 +312,17 @@ export const Consultation = () => {
     };
 
     const handleCancelEncounter = () => {
-        if (window.confirm('Close consultation without completing? Unsaved notes in the current editor may be lost.')) {
-            navigate('/doctor-workbench');
+        if (saveStatus === 'Unsaved changes') {
+            if (!window.confirm('You have unsaved changes. Leave anyway?')) return;
+        }
+        navigate('/doctor-workbench');
+    };
+
+    const handleToolClick = (toolId: string) => {
+        if (toolId === 'Vitals') {
+            setShowVitalsModal(true);
+        } else {
+            showToast('info', `${toolId} module coming soon.`);
         }
     };
 
@@ -188,6 +416,7 @@ export const Consultation = () => {
                 {TOP_TOOLS.map((tool) => (
                     <button 
                         key={tool.id}
+                        onClick={() => handleToolClick(tool.id)}
                         className="flex flex-col items-center justify-center min-w-[80px] px-2 py-1.5 rounded hover:bg-slate-50 hover:text-blue-600 text-slate-600 transition-all active:scale-95 group"
                     >
                         <tool.icon className={`w-5 h-5 mb-1 ${tool.color} group-hover:scale-110 transition-transform`} />
@@ -239,8 +468,18 @@ export const Consultation = () => {
                     {/* Editor Header */}
                     <div className="h-10 bg-slate-50 border-b border-slate-200 flex items-center justify-between px-4 shrink-0">
                         <span className="font-bold text-slate-700 text-sm">{activeSection}</span>
-                        <div className="text-[10px] text-slate-400">
-                           {lastEdited ? `Last saved: ${lastEdited}` : 'Unsaved changes'}
+                        <div className="flex items-center gap-2">
+                            {saveStatus === 'Saving...' && <Loader2 className="w-3 h-3 animate-spin text-blue-500" />}
+                            {saveStatus === 'Saved' && <CheckCircle className="w-3 h-3 text-green-500" />}
+                            {saveStatus === 'Unsaved changes' && <Cloud className="w-3 h-3 text-orange-400" />}
+                            
+                            <span className={`text-[10px] font-medium ${
+                                saveStatus === 'Unsaved changes' ? 'text-orange-500' : 'text-slate-400'
+                            }`}>
+                                {saveStatus === 'Saved' 
+                                    ? (lastEdited ? `All changes saved at ${lastEdited}` : 'All changes saved') 
+                                    : saveStatus}
+                            </span>
                         </div>
                     </div>
 
@@ -296,7 +535,7 @@ export const Consultation = () => {
                              </select>
                          </div>
                          <button 
-                            onClick={handleSaveNote}
+                            onClick={handleManualSave}
                             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-xs font-bold shadow-sm flex items-center gap-2 transition-all"
                          >
                              <Save className="w-3.5 h-3.5" /> Save Section
@@ -331,6 +570,11 @@ export const Consultation = () => {
                     </button>
                 </div>
             </div>
+            
+            {/* Vitals Modal */}
+            {showVitalsModal && appointmentId && (
+                <VitalsEntryModal appointmentId={appointmentId} onClose={() => setShowVitalsModal(false)} />
+            )}
 
         </div>
     );

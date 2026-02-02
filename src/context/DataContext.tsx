@@ -133,21 +133,21 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     id: v.id, appointmentId: v.appointment_id, recordedAt: v.recorded_at,
     bpSystolic: v.bp_systolic, bpDiastolic: v.bp_diastolic, temperature: v.temperature,
     pulse: v.pulse, respiratoryRate: v.respiratory_rate, weight: v.weight, height: v.height,
-    bmi: v.bmi, spo2: v.spo2
+    bmi: v.bmi, spo2: v.spo2, map: v.map, tobaccoUse: v.tobacco_use, rowRemarks: v.row_remarks
   });
   const mapVitalToDb = (v: any) => ({
     id: v.id, appointment_id: v.appointmentId, recorded_at: v.recordedAt,
     bp_systolic: v.bpSystolic, bp_diastolic: v.bpDiastolic, temperature: v.temperature,
     pulse: v.pulse, respiratory_rate: v.respiratoryRate, weight: v.weight, height: v.height,
-    bmi: v.bmi, spo2: v.spo2
+    bmi: v.bmi, spo2: v.spo2, map: v.map, tobacco_use: v.tobaccoUse, row_remarks: v.rowRemarks
   });
 
   const mapDiagnosisFromDb = (d: any): Diagnosis => ({
-    id: d.id, appointmentId: d.appointment_id, code: d.code, description: d.description,
+    id: d.id, appointmentId: d.appointment_id, code: d.code, icdCode: d.icd_code, description: d.description,
     type: d.type, addedAt: d.added_at
   });
   const mapDiagnosisToDb = (d: any) => ({
-    id: d.id, appointment_id: d.appointmentId, code: d.code, description: d.description,
+    id: d.id, appointment_id: d.appointmentId, code: d.code, icd_code: d.icdCode, description: d.description,
     type: d.type, added_at: d.addedAt
   });
 
@@ -440,9 +440,19 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const saveVitalSign = async (vital: VitalSign) => {
       if (!requireDb()) return;
-      setVitals(prev => [...prev, vital]);
-      const { error } = await getSupabase().from('clinical_vitals').insert(mapVitalToDb(vital));
-      if (error) { showToast('error', 'Failed to save vitals'); setVitals(prev => prev.filter(v => v.id !== vital.id)); }
+      
+      // Upsert into local state (replace if same appointment exists for simplicity, though normally allows history)
+      // For this simplified version, we just append or update based on ID
+      setVitals(prev => {
+          const exists = prev.find(v => v.id === vital.id);
+          if (exists) return prev.map(v => v.id === vital.id ? vital : v);
+          return [...prev, vital];
+      });
+
+      const { error } = await getSupabase().from('clinical_vitals').upsert(mapVitalToDb(vital));
+      if (error) { 
+          showToast('error', 'Failed to save vitals: ' + error.message); 
+      }
       else showToast('success', 'Vitals captured.');
   };
 
