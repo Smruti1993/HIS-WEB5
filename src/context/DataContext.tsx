@@ -165,7 +165,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   });
   const mapAllergyToDb = (a: any) => ({
     id: a.id, patient_id: a.patientId, allergen: a.allergen, severity: a.severity, reaction: a.reaction, status: a.status,
-    allergy_type: a.allergyType, onset_date: a.onsetDate, resolved_date: a.resolvedDate, remarks: a.remarks
+    allergy_type: a.allergyType, 
+    onset_date: a.onsetDate || null, 
+    resolved_date: a.resolvedDate || null, 
+    remarks: a.remarks
   });
 
   // --- Initial Fetch ---
@@ -490,7 +493,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setAllergies(prev => [...prev, allergy]);
       const { error } = await getSupabase().from('clinical_allergies').insert(mapAllergyToDb(allergy));
       if (error) { 
-          showToast('error', 'Failed to save allergy'); 
+          console.error("Save Allergy Error:", error);
+          showToast('error', `Failed to save allergy: ${error.message}`); 
           setAllergies(prev => prev.filter(a => a.id !== allergy.id)); 
       }
       else showToast('success', 'Allergy recorded.');
