@@ -8,15 +8,18 @@ ALTER TABLE appointments ADD COLUMN IF NOT EXISTS check_out_time TIMESTAMP WITH 
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS visit_type TEXT DEFAULT 'New Visit';
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS payment_mode TEXT DEFAULT 'CASH';
 
--- Fix for Clinical Diagnoses table missing icd_code
+-- Fix for Clinical Diagnoses table missing columns
 ALTER TABLE clinical_diagnoses ADD COLUMN IF NOT EXISTS icd_code TEXT;
+ALTER TABLE clinical_diagnoses ADD COLUMN IF NOT EXISTS is_poa BOOLEAN DEFAULT FALSE;
 
 -- Fix for Clinical Allergies table to support detailed form
 ALTER TABLE clinical_allergies ADD COLUMN IF NOT EXISTS allergy_type TEXT;
 ALTER TABLE clinical_allergies ADD COLUMN IF NOT EXISTS onset_date DATE;
 ALTER TABLE clinical_allergies ADD COLUMN IF NOT EXISTS resolved_date DATE;
 ALTER TABLE clinical_allergies ADD COLUMN IF NOT EXISTS remarks TEXT;
--- Note: 'reaction' column already exists, we will store comma-separated values or JSON string there.
+
+-- CRITICAL: Refresh the PostgREST schema cache to recognize new columns immediately
+NOTIFY pgrst, 'reload schema';
 
 -- ==========================================
 -- 1. Master Data Tables
@@ -161,8 +164,21 @@ CREATE TABLE IF NOT EXISTS clinical_diagnoses (
     code TEXT, -- Legacy or internal code
     icd_code TEXT, -- Official ICD Code
     description TEXT NOT NULL,
-    type TEXT DEFAULT 'Provisional', -- 'Provisional', 'Final'
+    type TEXT DEFAULT 'Provisional', -- 'Provisional', 'Final', 'Primary', 'Secondary'
+    is_poa BOOLEAN DEFAULT FALSE,
     added_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- New Table for the top part of the Diagnosis Screen
+CREATE TABLE IF NOT EXISTS clinical_narrative_diagnoses (
+    id TEXT PRIMARY KEY,
+    appointment_id TEXT REFERENCES appointments(id) ON DELETE CASCADE,
+    illness TEXT,
+    illness_duration_value INTEGER,
+    illness_duration_unit TEXT, -- Days, Weeks, Months, Years
+    behavioural_activity TEXT,
+    narrative TEXT,
+    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS clinical_allergies (
@@ -199,6 +215,7 @@ CREATE INDEX IF NOT EXISTS idx_bills_patient ON bills(patient_id);
 CREATE INDEX IF NOT EXISTS idx_clinical_notes_appt ON clinical_notes(appointment_id);
 CREATE INDEX IF NOT EXISTS idx_clinical_vitals_appt ON clinical_vitals(appointment_id);
 CREATE INDEX IF NOT EXISTS idx_clinical_diagnoses_appt ON clinical_diagnoses(appointment_id);
+CREATE INDEX IF NOT EXISTS idx_clinical_narrative_appt ON clinical_narrative_diagnoses(appointment_id);
 CREATE INDEX IF NOT EXISTS idx_clinical_allergies_patient ON clinical_allergies(patient_id);
 CREATE INDEX IF NOT EXISTS idx_patients_name ON patients(last_name);
 CREATE INDEX IF NOT EXISTS idx_employees_dept ON employees(department_id);
@@ -219,6 +236,7 @@ ALTER TABLE bill_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clinical_vitals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clinical_diagnoses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clinical_narrative_diagnoses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clinical_allergies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clinical_notes ENABLE ROW LEVEL SECURITY;
 
@@ -235,5 +253,6 @@ CREATE POLICY "Enable all access for all users" ON bill_items FOR ALL USING (tru
 CREATE POLICY "Enable all access for all users" ON payments FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON clinical_vitals FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON clinical_diagnoses FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for all users" ON clinical_narrative_diagnoses FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON clinical_allergies FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON clinical_notes FOR ALL USING (true) WITH CHECK (true);

@@ -123,8 +123,20 @@ export interface Diagnosis {
   code?: string;
   icdCode?: string;
   description: string;
-  type: 'Provisional' | 'Final';
+  type: 'Provisional' | 'Final' | 'Primary' | 'Secondary';
+  isPoa?: boolean; // Present On Admission
   addedAt: string;
+}
+
+export interface NarrativeDiagnosis {
+  id: string;
+  appointmentId: string;
+  illness?: string;
+  illnessDurationValue?: number;
+  illnessDurationUnit?: string;
+  behaviouralActivity?: string;
+  narrative?: string;
+  recordedAt: string;
 }
 
 export interface ClinicalNote {

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { 
   Patient, Employee, Department, Unit, ServiceCentre, 
   DoctorAvailability, Appointment, ToastMessage, Bill, BillItem, Payment,
-  VitalSign, Diagnosis, ClinicalNote, Allergy
+  VitalSign, Diagnosis, ClinicalNote, Allergy, NarrativeDiagnosis
 } from '../types';
 import { 
     getSupabase, 
@@ -44,10 +44,13 @@ interface DataContextType {
 
   vitals: VitalSign[];
   diagnoses: Diagnosis[];
+  narrativeDiagnoses: NarrativeDiagnosis[];
   clinicalNotes: ClinicalNote[];
   allergies: Allergy[];
   saveVitalSign: (vital: VitalSign) => void;
   saveDiagnosis: (diagnosis: Diagnosis) => void;
+  deleteDiagnosis: (id: string) => void;
+  saveNarrativeDiagnosis: (nd: NarrativeDiagnosis) => void;
   saveClinicalNote: (note: ClinicalNote) => void;
   saveAllergy: (allergy: Allergy) => void;
   
@@ -74,6 +77,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [bills, setBills] = useState<Bill[]>([]);
   const [vitals, setVitals] = useState<VitalSign[]>([]);
   const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([]);
+  const [narrativeDiagnoses, setNarrativeDiagnoses] = useState<NarrativeDiagnosis[]>([]);
   const [clinicalNotes, setClinicalNotes] = useState<ClinicalNote[]>([]);
   const [allergies, setAllergies] = useState<Allergy[]>([]);
 
@@ -145,11 +149,20 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const mapDiagnosisFromDb = (d: any): Diagnosis => ({
     id: d.id, appointmentId: d.appointment_id, code: d.code, icdCode: d.icd_code, description: d.description,
-    type: d.type, addedAt: d.added_at
+    type: d.type, isPoa: d.is_poa, addedAt: d.added_at
   });
   const mapDiagnosisToDb = (d: any) => ({
     id: d.id, appointment_id: d.appointmentId, code: d.code, icd_code: d.icdCode, description: d.description,
-    type: d.type, added_at: d.addedAt
+    type: d.type, is_poa: d.isPoa, added_at: d.addedAt
+  });
+
+  const mapNarrativeFromDb = (n: any): NarrativeDiagnosis => ({
+    id: n.id, appointmentId: n.appointment_id, illness: n.illness, illnessDurationValue: n.illness_duration_value,
+    illnessDurationUnit: n.illness_duration_unit, behaviouralActivity: n.behavioural_activity, narrative: n.narrative, recordedAt: n.recorded_at
+  });
+  const mapNarrativeToDb = (n: any) => ({
+    id: n.id, appointment_id: n.appointmentId, illness: n.illness, illness_duration_value: n.illnessDurationValue,
+    illness_duration_unit: n.illnessDurationUnit, behavioural_activity: n.behaviouralActivity, narrative: n.narrative, recorded_at: n.recordedAt
   });
 
   const mapNoteFromDb = (n: any): ClinicalNote => ({
@@ -188,7 +201,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const supabase = getSupabase();
 
       try {
-        const [pRes, eRes, dRes, uRes, sRes, avRes, apRes, bRes, biRes, payRes, vRes, diRes, notRes, alRes] = await Promise.all([
+        const [pRes, eRes, dRes, uRes, sRes, avRes, apRes, bRes, biRes, payRes, vRes, diRes, notRes, alRes, narRes] = await Promise.all([
           supabase.from('patients').select('*'),
           supabase.from('employees').select('*'),
           supabase.from('departments').select('*'),
@@ -203,6 +216,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           supabase.from('clinical_diagnoses').select('*'),
           supabase.from('clinical_notes').select('*'),
           supabase.from('clinical_allergies').select('*'),
+          supabase.from('clinical_narrative_diagnoses').select('*'),
         ]);
 
         if (pRes.error) throw pRes.error;
@@ -218,6 +232,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (diRes.data) setDiagnoses(diRes.data.map(mapDiagnosisFromDb));
         if (notRes.data) setClinicalNotes(notRes.data.map(mapNoteFromDb));
         if (alRes.data) setAllergies(alRes.data.map(mapAllergyFromDb));
+        if (narRes.data) setNarrativeDiagnoses(narRes.data.map(mapNarrativeFromDb));
 
         if (bRes.data) {
             const rawBills = bRes.data;
@@ -271,7 +286,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const disconnectDb = () => {
       clearCredentialsFromStorage();
       setIsDbConnected(false);
-      setPatients([]); setEmployees([]); setDepartments([]); setAppointments([]); setAvailabilities([]); setBills([]); setVitals([]); setDiagnoses([]); setClinicalNotes([]); setAllergies([]);
+      setPatients([]); setEmployees([]); setDepartments([]); setAppointments([]); setAvailabilities([]); setBills([]); setVitals([]); setDiagnoses([]); setClinicalNotes([]); setAllergies([]); setNarrativeDiagnoses([]);
       showToast('info', 'Disconnected from database.');
   };
 
@@ -468,7 +483,31 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setDiagnoses(prev => [...prev, diagnosis]);
       const { error } = await getSupabase().from('clinical_diagnoses').insert(mapDiagnosisToDb(diagnosis));
       if (error) { showToast('error', 'Failed to save diagnosis'); setDiagnoses(prev => prev.filter(d => d.id !== diagnosis.id)); }
-      else showToast('success', 'Diagnosis added.');
+      // Removed success toast to allow bulk saving without spamming toasts
+  };
+
+  const deleteDiagnosis = async (id: string) => {
+      if (!requireDb()) return;
+      const original = diagnoses.find(d => d.id === id);
+      setDiagnoses(prev => prev.filter(d => d.id !== id));
+      const { error } = await getSupabase().from('clinical_diagnoses').delete().eq('id', id);
+      if (error) { 
+          showToast('error', 'Failed to delete diagnosis');
+          if (original) setDiagnoses(prev => [...prev, original]);
+      }
+  };
+
+  const saveNarrativeDiagnosis = async (nd: NarrativeDiagnosis) => {
+      if (!requireDb()) return;
+      setNarrativeDiagnoses(prev => {
+          const exists = prev.find(n => n.id === nd.id || n.appointmentId === nd.appointmentId);
+          if (exists) return prev.map(n => n.appointmentId === nd.appointmentId ? nd : n);
+          return [...prev, nd];
+      });
+      const { error } = await getSupabase().from('clinical_narrative_diagnoses').upsert(mapNarrativeToDb(nd));
+      if (error) {
+          showToast('error', 'Failed to save narrative diagnosis: ' + error.message);
+      }
   };
 
   const saveClinicalNote = async (note: ClinicalNote) => {
@@ -494,7 +533,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { error } = await getSupabase().from('clinical_allergies').insert(mapAllergyToDb(allergy));
       if (error) { 
           console.error("Save Allergy Error:", error);
-          showToast('error', `Failed to save allergy: ${error.message}`); 
+          let userMsg = error.message;
+          if (userMsg.includes('schema cache') || userMsg.includes('allergy_type')) {
+             userMsg = "Database mismatch. Please run 'NOTIFY pgrst, reload schema' in SQL Editor.";
+          }
+          showToast('error', `Failed: ${userMsg}`); 
           setAllergies(prev => prev.filter(a => a.id !== allergy.id)); 
       }
       else showToast('success', 'Allergy recorded.');
@@ -510,7 +553,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       availabilities, saveAvailability, deleteAvailability,
       appointments, bookAppointment, updateAppointment, cancelAppointment,
       bills, createBill, addPayment,
-      vitals, diagnoses, clinicalNotes, allergies, saveVitalSign, saveDiagnosis, saveClinicalNote, saveAllergy,
+      vitals, diagnoses, narrativeDiagnoses, clinicalNotes, allergies, 
+      saveVitalSign, saveDiagnosis, deleteDiagnosis, saveNarrativeDiagnosis, saveClinicalNote, saveAllergy,
       toasts, showToast, removeToast,
       isLoading, isDbConnected, updateDbConnection, disconnectDb
     }}>
