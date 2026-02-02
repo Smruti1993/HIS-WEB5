@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
 import { DatePicker } from '../components/DatePicker';
-import { User, Activity, FileText, FlaskConical, Stethoscope, Microscope, X, Calendar, AlertTriangle, ChevronRight } from 'lucide-react';
+import { User, Activity, FileText, FlaskConical, Stethoscope, Microscope, X, Calendar, AlertTriangle, ChevronRight, Bell } from 'lucide-react';
 import { Appointment } from '../types';
 import { useNavigate } from 'react-router-dom';
 
@@ -283,7 +283,7 @@ const EMRModal = ({ patientId, onClose }: { patientId: string, onClose: () => vo
 };
 
 export const DoctorWorkbench = () => {
-  const { appointments, patients, vitals, diagnoses, saveVitalSign, updateAppointment, bills } = useData();
+  const { appointments, patients, vitals, diagnoses, allergies, saveVitalSign, updateAppointment, bills } = useData();
   const navigate = useNavigate();
 
   // --- EMR State ---
@@ -469,6 +469,7 @@ export const DoctorWorkbench = () => {
                           const latestVitals = getLatestVitals(apt.id);
                           const diagnosisText = getDiagnoses(apt.id);
                           const age = patient ? new Date().getFullYear() - new Date(patient.dob).getFullYear() : 0;
+                          const activeAllergies = allergies.filter(a => a.patientId === apt.patientId && a.status === 'Active');
                           
                           // Alternating row colors similar to screenshot (Greenish/Yellowish)
                           const rowClass = idx % 2 === 0 ? 'bg-[#ebfadc]' : 'bg-[#eafaea]'; // Light green variants
@@ -489,6 +490,12 @@ export const DoctorWorkbench = () => {
                                       <div className="text-[10px] text-slate-400 mt-1">
                                           {apt.visitType || 'New Visit'} | Nurse: Pending
                                       </div>
+                                      {activeAllergies.length > 0 && (
+                                          <div className="mt-2 inline-flex items-center gap-1.5 bg-slate-900 text-white text-[10px] px-2 py-1 rounded shadow-sm font-bold uppercase tracking-wide">
+                                              <Bell className="w-3 h-3 text-yellow-400 fill-yellow-400 animate-pulse" />
+                                              <span>Allergy Alert</span>
+                                          </div>
+                                      )}
                                   </td>
                                   <td className="p-2 border-r border-slate-200 text-center align-middle">
                                       <button 
