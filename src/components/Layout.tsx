@@ -1,16 +1,22 @@
 import React from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { APP_NAME, NAV_ITEMS, NavItem } from '../constants';
 import { useData } from '../context/DataContext';
-import { Bell, Search, UserCircle, X } from 'lucide-react';
+import { Bell, Search, UserCircle, X, LogOut } from 'lucide-react';
 
 export const Layout = () => {
   const location = useLocation();
-  const { toasts, removeToast } = useData();
+  const navigate = useNavigate();
+  const { toasts, removeToast, user, logout } = useData();
 
   const getPageTitle = () => {
     const item = NAV_ITEMS.find(n => n.path === location.pathname);
     return item ? item.label : 'MediCore HMS';
+  };
+
+  const handleLogout = () => {
+      logout();
+      navigate('/login');
   };
 
   // Group items by category
@@ -76,12 +82,19 @@ export const Layout = () => {
         </nav>
 
         <div className="p-4 border-t border-slate-100">
-          <div className="flex items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
+          <div className="flex items-center p-3 bg-slate-50 rounded-xl border border-slate-100 relative group">
             <UserCircle className="w-9 h-9 text-slate-400" />
-            <div className="ml-3 overflow-hidden">
-              <p className="text-sm font-bold text-slate-700 truncate">Dr. Admin</p>
-              <p className="text-xs text-slate-500 truncate">System Administrator</p>
+            <div className="ml-3 overflow-hidden flex-1">
+              <p className="text-sm font-bold text-slate-700 truncate">{user?.fullName || 'Guest'}</p>
+              <p className="text-xs text-slate-500 truncate">{user?.role || 'Viewer'}</p>
             </div>
+            <button 
+                onClick={handleLogout}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white text-slate-400 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all shadow-sm"
+                title="Logout"
+            >
+                <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </aside>

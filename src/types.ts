@@ -76,6 +76,14 @@ export interface Employee {
   status: 'Active' | 'Inactive';
 }
 
+export interface AppUser {
+  id: string;
+  username: string;
+  role: string;
+  fullName: string;
+  employeeId?: string;
+}
+
 export interface Patient {
   id: string;
   firstName: string;

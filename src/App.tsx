@@ -1,6 +1,6 @@
 import React from 'react';
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { DataProvider } from './context/DataContext';
+import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { DataProvider, useData } from './context/DataContext';
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { Appointments } from './pages/Appointments';
@@ -12,13 +12,31 @@ import { Connection } from './pages/Connection';
 import { Billing } from './pages/Billing';
 import { DoctorWorkbench } from './pages/DoctorWorkbench';
 import { Consultation } from './pages/Consultation';
+import { Login } from './pages/Login';
 
-const App = () => {
-  return (
-    <DataProvider>
-      <HashRouter>
+const PrivateRoute = ({ children }: { children: React.ReactElement }) => {
+    const { user, isDbConnected } = useData();
+    const location = useLocation();
+
+    // Allow access to Connection page even if not logged in, but strictly enforce login for others
+    if (location.pathname === '/connection') {
+        return children;
+    }
+
+    if (!user) {
+        return <Navigate to="/login" replace state={{ from: location }} />;
+    }
+
+    return children;
+};
+
+const AppRoutes = () => {
+    return (
         <Routes>
-          <Route path="/" element={<Layout />}>
+          <Route path="/login" element={<Login />} />
+          <Route path="/connection" element={<Connection />} />
+          
+          <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
             <Route index element={<Dashboard />} />
             <Route path="appointments" element={<Appointments />} />
             <Route path="patients" element={<Patients />} />
@@ -28,10 +46,17 @@ const App = () => {
             <Route path="employees" element={<Employees />} />
             <Route path="availability" element={<Availability />} />
             <Route path="masters" element={<Masters />} />
-            <Route path="connection" element={<Connection />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
+    );
+}
+
+const App = () => {
+  return (
+    <DataProvider>
+      <HashRouter>
+        <AppRoutes />
       </HashRouter>
     </DataProvider>
   );

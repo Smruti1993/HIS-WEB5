@@ -57,6 +57,22 @@ CREATE TABLE IF NOT EXISTS service_definitions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- 5. New Table: App Users (Login)
+CREATE TABLE IF NOT EXISTS app_users (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    role TEXT NOT NULL,
+    employee_id TEXT REFERENCES employees(id) ON DELETE SET NULL,
+    full_name TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Insert default admin user if not exists
+INSERT INTO app_users (username, password, role, full_name)
+SELECT 'admin', 'admin123', 'Admin', 'Dr. System Administrator'
+WHERE NOT EXISTS (SELECT 1 FROM app_users WHERE username = 'admin');
+
 -- CRITICAL: Refresh the PostgREST schema cache
 NOTIFY pgrst, 'reload schema';
 
@@ -271,6 +287,7 @@ ALTER TABLE clinical_narrative_diagnoses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clinical_allergies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clinical_notes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE service_definitions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app_users ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Enable all access for all users" ON departments FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON units FOR ALL USING (true) WITH CHECK (true);
@@ -289,3 +306,4 @@ CREATE POLICY "Enable all access for all users" ON clinical_narrative_diagnoses 
 CREATE POLICY "Enable all access for all users" ON clinical_allergies FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON clinical_notes FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON service_definitions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for all users" ON app_users FOR ALL USING (true) WITH CHECK (true);

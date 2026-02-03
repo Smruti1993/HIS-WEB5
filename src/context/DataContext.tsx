@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { 
   Patient, Employee, Department, Unit, ServiceCentre, 
   DoctorAvailability, Appointment, ToastMessage, Bill, BillItem, Payment,
-  VitalSign, Diagnosis, ClinicalNote, Allergy, NarrativeDiagnosis, MasterDiagnosis, ServiceDefinition
+  VitalSign, Diagnosis, ClinicalNote, Allergy, NarrativeDiagnosis, MasterDiagnosis, ServiceDefinition, AppUser
 } from '../types';
 import { 
     getSupabase, 
@@ -12,6 +12,10 @@ import {
 } from '../services/supabaseClient';
 
 interface DataContextType {
+  user: AppUser | null;
+  login: (u: string, p: string) => Promise<boolean>;
+  logout: () => void;
+
   patients: Patient[];
   addPatient: (patient: Patient) => void;
   updatePatient: (id: string, data: Partial<Patient>) => void;
@@ -74,6 +78,12 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  // Auth State
+  const [user, setUser] = useState<AppUser | null>(() => {
+      const saved = localStorage.getItem('medicore_user');
+      return saved ? JSON.parse(saved) : null;
+  });
+
   const [patients, setPatients] = useState<Patient[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -223,7 +233,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       auto_processable: s.autoProcessable, consent_required: s.consentRequired, is_restricted: s.isRestricted,
       is_external: s.isExternal, is_percentage_tariff: s.isPercentageTariff, is_tooth_mandatory: s.isToothMandatory,
       is_auth_required: s.isAuthRequired, group_name: s.groupName, billing_group_name: s.billingGroupName,
-      financial_group: s.financialGroup, cpt_description: s.cptDescription, special_instructions: s.specialInstructions
+      financial_group: s.financialGroup, cpt_description: s.cptDescription, special_instructions: s.special_instructions
   });
 
 
@@ -235,13 +245,22 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (!checkConfigured()) {
         setIsDbConnected(false);
-        if (refreshTrigger === 0) showToast('info', 'Please configure Database Connection in the menu.');
+        // Only show info toast on initial load, not subsequent refresh
+        if (refreshTrigger === 0) {
+            // showToast('info', 'Please configure Database Connection in the menu.');
+        }
         setIsLoading(false);
         return;
       }
 
       setIsDbConnected(true);
       const supabase = getSupabase();
+
+      // Only fetch data if user is logged in
+      if (!user) {
+          setIsLoading(false);
+          return;
+      }
 
       try {
         const [pRes, eRes, dRes, uRes, sRes, avRes, apRes, bRes, biRes, payRes, vRes, diRes, notRes, alRes, narRes, mdRes, sdRes] = await Promise.all([
@@ -297,6 +316,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         showToast('success', 'Data synced with database.');
       } catch (error: any) {
         console.error("Error fetching data:", error);
+        // Better error message
         let msg = 'Failed to connect to database.';
         if (error.code === 'PGRST301' || error.message?.includes('does not exist')) {
             msg = 'Connected, but tables are missing. Please check your DB schema.';
@@ -310,7 +330,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     fetchAllData();
-  }, [refreshTrigger]);
+  }, [refreshTrigger, user]); // Refetch on login
 
   // --- Actions ---
 
@@ -333,7 +353,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const disconnectDb = () => {
       clearCredentialsFromStorage();
       setIsDbConnected(false);
-      setPatients([]); setEmployees([]); setDepartments([]); setAppointments([]); setAvailabilities([]); setBills([]); setVitals([]); setDiagnoses([]); setClinicalNotes([]); setAllergies([]); setNarrativeDiagnoses([]); setMasterDiagnoses([]); setServiceDefinitions([]);
+      logout();
       showToast('info', 'Disconnected from database.');
   };
 
@@ -345,6 +365,61 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return true;
   };
 
+  // --- Auth Actions ---
+
+  const login = async (username: string, password: string): Promise<boolean> => {
+      if (!checkConfigured()) {
+          showToast('error', 'Please configure database connection first');
+          return false;
+      }
+
+      setIsLoading(true);
+      const supabase = getSupabase();
+      
+      try {
+          const { data, error } = await supabase
+              .from('app_users')
+              .select('*')
+              .eq('username', username)
+              .eq('password', password)
+              .single();
+
+          if (error || !data) {
+              showToast('error', 'Invalid username or password');
+              setIsLoading(false);
+              return false;
+          }
+
+          const loggedUser: AppUser = {
+              id: data.id,
+              username: data.username,
+              role: data.role,
+              fullName: data.full_name || 'User',
+              employeeId: data.employee_id
+          };
+
+          setUser(loggedUser);
+          localStorage.setItem('medicore_user', JSON.stringify(loggedUser));
+          showToast('success', `Welcome back, ${loggedUser.fullName}`);
+          return true;
+      } catch (e) {
+          console.error(e);
+          showToast('error', 'Login failed');
+          return false;
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
+  const logout = () => {
+      setUser(null);
+      localStorage.removeItem('medicore_user');
+      
+      // Clear data states
+      setPatients([]); setEmployees([]); setDepartments([]); setAppointments([]); setAvailabilities([]); setBills([]); setVitals([]); setDiagnoses([]); setClinicalNotes([]); setAllergies([]); setNarrativeDiagnoses([]); setMasterDiagnoses([]); setServiceDefinitions([]);
+  };
+
+  // ... (Keep existing ADD/UPDATE functions - Ensure they check requireDb)
   const addPatient = async (p: Patient) => {
     if (!requireDb()) return;
     setPatients(prev => [...prev, p]);
@@ -631,6 +706,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   return (
     <DataContext.Provider value={{
+      user, login, logout,
       patients, addPatient, updatePatient,
       employees, addEmployee, updateEmployee,
       departments, addDepartment,
