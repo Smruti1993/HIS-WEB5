@@ -19,6 +19,15 @@ export interface MasterDiagnosis {
   status: 'Active' | 'Inactive';
 }
 
+export interface ServiceTariff {
+  id: string;
+  serviceId: string;
+  tariffName: string;
+  price: number;
+  effectiveDate: string;
+  status: 'Active' | 'Inactive';
+}
+
 // NEW: Service Master Definition
 export interface ServiceDefinition {
   id: string;
@@ -55,6 +64,8 @@ export interface ServiceDefinition {
   financialGroup?: string;
   cptDescription?: string;
   specialInstructions?: string;
+  // Optional for frontend convenience to store nested tariffs
+  tariffs?: ServiceTariff[];
 }
 
 export enum EmployeeRole {

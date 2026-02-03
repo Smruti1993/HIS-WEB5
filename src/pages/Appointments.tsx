@@ -53,7 +53,8 @@ export const Appointments = () => {
         return;
     }
 
-    const dateObj = new Date(selectedDate);
+    // Use local time for day index calculation to avoid UTC offset issues
+    const dateObj = new Date(selectedDate + 'T00:00:00');
     const dayIndex = dateObj.getDay();
     const availability = availabilities.find(a => a.doctorId === selectedDoctor && a.dayOfWeek === dayIndex);
 
@@ -66,6 +67,7 @@ export const Appointments = () => {
     let current = new Date(`${selectedDate}T${availability.startTime}`);
     const end = new Date(`${selectedDate}T${availability.endTime}`);
     const duration = availability.slotDurationMinutes;
+    const now = new Date();
 
     while (current < end) {
         const timeStr = current.toTimeString().substring(0, 5);
@@ -78,7 +80,10 @@ export const Appointments = () => {
             a.status !== 'Cancelled'
         );
 
-        if (!isBooked) slots.push(timeStr);
+        // Check if time has passed
+        const isPast = current < now;
+
+        if (!isBooked && !isPast) slots.push(timeStr);
         current.setMinutes(current.getMinutes() + duration);
     }
 

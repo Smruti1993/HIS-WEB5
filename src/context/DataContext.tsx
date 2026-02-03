@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { 
   Patient, Employee, Department, Unit, ServiceCentre, 
   DoctorAvailability, Appointment, ToastMessage, Bill, BillItem, Payment,
-  VitalSign, Diagnosis, ClinicalNote, Allergy, NarrativeDiagnosis, MasterDiagnosis, ServiceDefinition, AppUser
+  VitalSign, Diagnosis, ClinicalNote, Allergy, NarrativeDiagnosis, MasterDiagnosis, ServiceDefinition, AppUser, ServiceTariff
 } from '../types';
 import { 
     getSupabase, 
@@ -37,6 +37,7 @@ interface DataContextType {
   uploadMasterDiagnoses: (data: MasterDiagnosis[]) => Promise<void>;
 
   serviceDefinitions: ServiceDefinition[];
+  serviceTariffs: ServiceTariff[];
   saveServiceDefinition: (service: ServiceDefinition) => void;
   uploadServiceDefinitions: (services: ServiceDefinition[]) => Promise<void>;
   
@@ -91,6 +92,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [serviceCentres, setServiceCentres] = useState<ServiceCentre[]>([]);
   const [masterDiagnoses, setMasterDiagnoses] = useState<MasterDiagnosis[]>([]);
   const [serviceDefinitions, setServiceDefinitions] = useState<ServiceDefinition[]>([]);
+  const [serviceTariffs, setServiceTariffs] = useState<ServiceTariff[]>([]);
   const [availabilities, setAvailabilities] = useState<DoctorAvailability[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
@@ -236,6 +238,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       financial_group: s.financialGroup, cpt_description: s.cptDescription, special_instructions: s.special_instructions
   });
 
+  const mapTariffFromDb = (t: any): ServiceTariff => ({
+      id: t.id, serviceId: t.service_id, tariffName: t.tariff_name, price: t.price, effectiveDate: t.effective_date, status: t.status
+  });
+  const mapTariffToDb = (t: any) => ({
+      id: t.id, service_id: t.serviceId, tariff_name: t.tariffName, price: t.price, effective_date: t.effectiveDate, status: t.status
+  });
+
 
   // --- Initial Fetch ---
 
@@ -263,7 +272,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       try {
-        const [pRes, eRes, dRes, uRes, sRes, avRes, apRes, bRes, biRes, payRes, vRes, diRes, notRes, alRes, narRes, mdRes, sdRes] = await Promise.all([
+        const [pRes, eRes, dRes, uRes, sRes, avRes, apRes, bRes, biRes, payRes, vRes, diRes, notRes, alRes, narRes, mdRes, sdRes, stRes] = await Promise.all([
           supabase.from('patients').select('*'),
           supabase.from('employees').select('*'),
           supabase.from('departments').select('*'),
@@ -281,6 +290,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           supabase.from('clinical_narrative_diagnoses').select('*'),
           supabase.from('master_diagnoses').select('*'),
           supabase.from('service_definitions').select('*'),
+          supabase.from('service_tariffs').select('*'),
         ]);
 
         if (pRes.error) throw pRes.error;
@@ -299,6 +309,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (narRes.data) setNarrativeDiagnoses(narRes.data.map(mapNarrativeFromDb));
         if (mdRes.data) setMasterDiagnoses(mdRes.data.map(mapMasterDiagFromDb));
         if (sdRes.data) setServiceDefinitions(sdRes.data.map(mapServiceDefFromDb));
+        if (stRes.data) setServiceTariffs(stRes.data.map(mapTariffFromDb));
 
         if (bRes.data) {
             const rawBills = bRes.data;
@@ -416,7 +427,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       localStorage.removeItem('medicore_user');
       
       // Clear data states
-      setPatients([]); setEmployees([]); setDepartments([]); setAppointments([]); setAvailabilities([]); setBills([]); setVitals([]); setDiagnoses([]); setClinicalNotes([]); setAllergies([]); setNarrativeDiagnoses([]); setMasterDiagnoses([]); setServiceDefinitions([]);
+      setPatients([]); setEmployees([]); setDepartments([]); setAppointments([]); setAvailabilities([]); setBills([]); setVitals([]); setDiagnoses([]); setClinicalNotes([]); setAllergies([]); setNarrativeDiagnoses([]); setMasterDiagnoses([]); setServiceDefinitions([]); setServiceTariffs([]);
   };
 
   // ... (Keep existing ADD/UPDATE functions - Ensure they check requireDb)
@@ -514,20 +525,44 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const saveServiceDefinition = async (service: ServiceDefinition) => {
       if (!requireDb()) return;
+      
+      // Optimistic update for Service Definition
       setServiceDefinitions(prev => {
           const exists = prev.find(s => s.id === service.id);
           if (exists) return prev.map(s => s.id === service.id ? service : s);
           return [...prev, service];
       });
 
+      // Save Service
       const { error } = await getSupabase().from('service_definitions').upsert(mapServiceDefToDb(service));
+      
       if (error) { 
           showToast('error', `Failed to save service: ${error.message}`); 
-          // If insert failed, remove from local state
           setServiceDefinitions(prev => prev.filter(s => s.id !== service.id));
-      } else {
-          showToast('success', 'Service saved successfully.');
+          return;
       }
+
+      // Handle Tariffs if provided
+      if (service.tariffs && service.tariffs.length > 0) {
+          // Remove tariffs for this service first (simple replacement strategy) or upsert
+          // For now, let's just upsert
+          const tariffPayload = service.tariffs.map(t => mapTariffToDb(t));
+          
+          const { error: tariffError } = await getSupabase().from('service_tariffs').upsert(tariffPayload);
+          
+          if (tariffError) {
+              console.error(tariffError);
+              showToast('error', 'Service saved, but failed to save tariffs.');
+          } else {
+              // Update local tariff state
+              setServiceTariffs(prev => {
+                  const others = prev.filter(t => t.serviceId !== service.id);
+                  return [...others, ...service.tariffs!];
+              });
+          }
+      }
+
+      showToast('success', 'Service saved successfully.');
   };
 
   const uploadServiceDefinitions = async (services: ServiceDefinition[]) => {
@@ -713,7 +748,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       units, addUnit,
       serviceCentres, addServiceCentre,
       masterDiagnoses, uploadMasterDiagnoses,
-      serviceDefinitions, saveServiceDefinition, uploadServiceDefinitions,
+      serviceDefinitions, serviceTariffs, saveServiceDefinition, uploadServiceDefinitions,
       availabilities, saveAvailability, deleteAvailability,
       appointments, bookAppointment, updateAppointment, cancelAppointment,
       bills, createBill, addPayment,

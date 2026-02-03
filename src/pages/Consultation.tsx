@@ -4,12 +4,13 @@ import { useData } from '../context/DataContext';
 import { 
   User, Info, Save, Printer, FileText, Bell, Activity, Stethoscope, Briefcase, 
   Pill, Clock, FileInput, ChevronRight, ChevronDown, 
-  Bold, Italic, Underline, List, AlignLeft, Type, Download, XCircle, Cloud, CheckCircle, Loader2, Calculator, Plus, Trash2, Search, RotateCcw, History, AlertTriangle, ArrowLeft
+  Bold, Italic, Underline, List, AlignLeft, Type, Download, XCircle, Cloud, CheckCircle, Loader2, Calculator, Plus, Trash2, Search, RotateCcw, History, AlertTriangle, ArrowLeft, Calendar
 } from 'lucide-react';
 import { VitalSign, Allergy, Diagnosis } from '../types';
 
 // --- Static Configs ---
 const SIDEBAR_ITEMS = [
+    { id: 'Visit History', label: 'Visit History' },
     { id: 'Chief Complaint', label: 'Chief Complaint' },
     { id: 'History of Present Illness', label: 'History of Present Illness' },
     { id: 'Past History', label: 'Past History' },
@@ -816,7 +817,7 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
 export const Consultation = () => {
   const { appointmentId } = useParams<{ appointmentId: string }>();
   const navigate = useNavigate();
-  const { appointments, patients, vitals, updateAppointment, clinicalNotes, saveClinicalNote, employees, departments, allergies } = useData();
+  const { appointments, patients, vitals, updateAppointment, clinicalNotes, saveClinicalNote, employees, departments, allergies, diagnoses } = useData();
   
   const [activeSection, setActiveSection] = useState('Chief Complaint');
   
@@ -854,6 +855,93 @@ export const Consultation = () => {
   const handleComplete = () => {
       updateAppointment(appointment.id, { status: 'Completed', checkOutTime: new Date().toISOString() });
       navigate('/doctor-workbench');
+  };
+
+  const getPatientHistory = () => {
+    return appointments
+        .filter(a => a.patientId === patient.id && a.id !== appointment.id && a.status !== 'Cancelled')
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  };
+
+  const renderVisitHistory = () => {
+    const history = getPatientHistory();
+    if (history.length === 0) return <div className="p-8 text-center text-slate-400 italic">No past visit history found for this patient.</div>;
+
+    return (
+        <div className="space-y-4">
+            {history.map(apt => {
+                const doc = employees.find(e => e.id === apt.doctorId);
+                const dept = departments.find(d => d.id === apt.departmentId);
+                const aptDiagnoses = diagnoses.filter(d => d.appointmentId === apt.id);
+                const aptVitals = vitals.find(v => v.appointmentId === apt.id); // Assuming one record per visit or getting latest
+
+                return (
+                    <div key={apt.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors bg-slate-50/50">
+                        {/* Header */}
+                        <div className="flex justify-between items-start mb-3">
+                            <div>
+                                <div className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                    <Calendar className="w-4 h-4 text-blue-500" />
+                                    {new Date(apt.date).toLocaleDateString()} 
+                                    <span className="text-slate-400 font-normal text-xs">at {apt.time}</span>
+                                </div>
+                                <div className="text-xs text-slate-600 mt-1 ml-6">
+                                    Dr. {doc?.firstName} {doc?.lastName} <span className="text-slate-300 mx-1">|</span> {dept?.name}
+                                </div>
+                            </div>
+                            <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide border ${
+                                apt.status === 'Completed' 
+                                ? 'bg-green-50 text-green-700 border-green-100' 
+                                : 'bg-blue-50 text-blue-700 border-blue-100'
+                            }`}>
+                                {apt.status}
+                            </span>
+                        </div>
+
+                        {/* Diagnoses */}
+                        {aptDiagnoses.length > 0 && (
+                            <div className="mb-3 ml-6">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1">
+                                    <Info className="w-3 h-3" /> Diagnosis
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {aptDiagnoses.map(d => (
+                                        <span key={d.id} className="bg-amber-50 text-amber-800 border border-amber-100 px-2 py-0.5 rounded text-xs">
+                                            {d.description}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Vitals Summary */}
+                        {aptVitals && (
+                            <div className="ml-6 mb-3">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1">
+                                    <Activity className="w-3 h-3" /> Vitals
+                                </div>
+                                <div className="text-xs text-slate-700 flex flex-wrap gap-x-4 gap-y-1">
+                                    {aptVitals.bpSystolic && <div><span className="font-semibold text-slate-500">BP:</span> {aptVitals.bpSystolic}/{aptVitals.bpDiastolic}</div>}
+                                    {aptVitals.temperature && <div><span className="font-semibold text-slate-500">Temp:</span> {aptVitals.temperature}°C</div>}
+                                    {aptVitals.pulse && <div><span className="font-semibold text-slate-500">HR:</span> {aptVitals.pulse}</div>}
+                                    {aptVitals.spo2 && <div><span className="font-semibold text-slate-500">SpO2:</span> {aptVitals.spo2}%</div>}
+                                    {aptVitals.weight && <div><span className="font-semibold text-slate-500">Wt:</span> {aptVitals.weight}kg</div>}
+                                </div>
+                            </div>
+                        )}
+                        
+                        {/* Note Snippet */}
+                        {apt.notes && (
+                             <div className="mt-3 ml-6 text-xs text-slate-500 italic border-t border-slate-200 pt-2 flex items-start gap-1">
+                                <FileText className="w-3 h-3 shrink-0 mt-0.5" />
+                                {apt.notes}
+                             </div>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
   };
 
   return (
@@ -999,39 +1087,45 @@ export const Consultation = () => {
                         {SIDEBAR_ITEMS.find(i => i.id === activeSection)?.label}
                     </h3>
                     
-                    <div className="max-w-5xl mx-auto">
-                        <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg text-amber-800 text-sm mb-6 flex items-start gap-3">
-                            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                            <div>
-                                <p className="font-bold">Currently editing: {activeSection}</p>
-                                <p className="text-xs mt-1 text-amber-700">Use the toolbar buttons (F3-F8) or sidebar to navigate through the clinical workflow. Changes are auto-saved locally until completed.</p>
-                            </div>
+                    {activeSection === 'Visit History' ? (
+                        <div className="animate-in fade-in duration-300">
+                            {renderVisitHistory()}
                         </div>
-
-                        <div className="space-y-6">
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-2">Clinical Notes & Findings</label>
-                                <div className="relative">
-                                    <textarea 
-                                        className="w-full h-80 p-5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none text-slate-700 leading-relaxed text-sm bg-white shadow-inner"
-                                        placeholder={`Enter clinical details for ${activeSection} here...`}
-                                    ></textarea>
-                                    <div className="absolute bottom-4 right-4 text-xs text-slate-400">
-                                        Markdown Supported
-                                    </div>
+                    ) : (
+                        <div className="max-w-5xl mx-auto animate-in fade-in duration-300">
+                            <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg text-amber-800 text-sm mb-6 flex items-start gap-3">
+                                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="font-bold">Currently editing: {activeSection}</p>
+                                    <p className="text-xs mt-1 text-amber-700">Use the toolbar buttons (F3-F8) or sidebar to navigate through the clinical workflow. Changes are auto-saved locally until completed.</p>
                                 </div>
                             </div>
-                            
-                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                                <button className="px-6 py-2.5 border border-slate-300 text-slate-600 rounded-lg font-bold text-sm hover:bg-slate-50 transition-colors">
-                                    Clear Notes
-                                </button>
-                                <button className="bg-blue-600 text-white px-8 py-2.5 rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors shadow-md shadow-blue-100 flex items-center gap-2">
-                                    <Save className="w-4 h-4" /> Save {activeSection}
-                                </button>
+
+                            <div className="space-y-6">
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-2">Clinical Notes & Findings</label>
+                                    <div className="relative">
+                                        <textarea 
+                                            className="w-full h-80 p-5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none text-slate-700 leading-relaxed text-sm bg-white shadow-inner"
+                                            placeholder={`Enter clinical details for ${activeSection} here...`}
+                                        ></textarea>
+                                        <div className="absolute bottom-4 right-4 text-xs text-slate-400">
+                                            Markdown Supported
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                                    <button className="px-6 py-2.5 border border-slate-300 text-slate-600 rounded-lg font-bold text-sm hover:bg-slate-50 transition-colors">
+                                        Clear Notes
+                                    </button>
+                                    <button className="bg-blue-600 text-white px-8 py-2.5 rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors shadow-md shadow-blue-100 flex items-center gap-2">
+                                        <Save className="w-4 h-4" /> Save {activeSection}
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             </div>
         </div>

@@ -68,6 +68,17 @@ CREATE TABLE IF NOT EXISTS app_users (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- 6. New Table: Service Tariffs
+CREATE TABLE IF NOT EXISTS service_tariffs (
+    id TEXT PRIMARY KEY,
+    service_id TEXT REFERENCES service_definitions(id) ON DELETE CASCADE,
+    tariff_name TEXT NOT NULL,
+    price NUMERIC(10, 2) DEFAULT 0,
+    effective_date DATE DEFAULT CURRENT_DATE,
+    status TEXT DEFAULT 'Active',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Insert default admin user if not exists
 INSERT INTO app_users (username, password, role, full_name)
 SELECT 'admin', 'admin123', 'Admin', 'Dr. System Administrator'
@@ -268,6 +279,7 @@ CREATE INDEX IF NOT EXISTS idx_patients_name ON patients(last_name);
 CREATE INDEX IF NOT EXISTS idx_employees_dept ON employees(department_id);
 CREATE INDEX IF NOT EXISTS idx_master_diagnoses_desc ON master_diagnoses(description);
 CREATE INDEX IF NOT EXISTS idx_service_defs_code ON service_definitions(code);
+CREATE INDEX IF NOT EXISTS idx_service_tariffs_service ON service_tariffs(service_id);
 
 -- RLS (Open Access for Development)
 ALTER TABLE departments ENABLE ROW LEVEL SECURITY;
@@ -288,6 +300,7 @@ ALTER TABLE clinical_allergies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clinical_notes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE service_definitions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE service_tariffs ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Enable all access for all users" ON departments FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON units FOR ALL USING (true) WITH CHECK (true);
@@ -307,3 +320,4 @@ CREATE POLICY "Enable all access for all users" ON clinical_allergies FOR ALL US
 CREATE POLICY "Enable all access for all users" ON clinical_notes FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON service_definitions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON app_users FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for all users" ON service_tariffs FOR ALL USING (true) WITH CHECK (true);
