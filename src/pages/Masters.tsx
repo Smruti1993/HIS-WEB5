@@ -701,46 +701,48 @@ const ServiceMaster = () => {
                 {/* TARIFF TAB */}
                 {activeTab === 'tariff' && (
                     <div className="animate-in fade-in duration-200 h-full flex flex-col">
-                        <div className="bg-white p-4 rounded-lg border border-slate-200 mb-4">
-                            <h4 className="font-bold text-slate-800 text-sm mb-3">Add New Tariff</h4>
-                            <div className="flex gap-4 items-end">
-                                <div className="flex-1">
-                                    <label className="form-label">Tariff Name (e.g., Standard, Insurance A)</label>
+                        <div className="bg-white p-5 rounded-lg border border-slate-200 mb-4 shadow-sm">
+                            <h4 className="font-bold text-slate-800 text-sm mb-4 border-b border-slate-100 pb-2">Add New Tariff</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                                <div className="md:col-span-6">
+                                    <label className="form-label">Tariff Name <span className="text-slate-400 font-normal text-xs">(e.g. Standard, Insurance A)</span></label>
                                     <input 
-                                        className="form-input" 
+                                        className="form-input h-10" 
                                         placeholder="Enter tariff name" 
                                         value={newTariffName}
                                         onChange={e => setNewTariffName(e.target.value)}
                                     />
                                 </div>
-                                <div className="w-48">
+                                <div className="md:col-span-3">
                                     <label className="form-label">Price</label>
                                     <div className="relative">
-                                        <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                        <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                         <input 
                                             type="number" 
-                                            className="form-input pl-8" 
+                                            className="form-input pl-9 h-10" 
                                             placeholder="0.00" 
                                             value={newTariffPrice}
                                             onChange={e => setNewTariffPrice(e.target.value)}
                                         />
                                     </div>
                                 </div>
-                                <button 
-                                    type="button" 
-                                    onClick={addTariff}
-                                    className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-green-700 transition-colors shadow-sm mb-[1px]"
-                                >
-                                    Add Tariff
-                                </button>
+                                <div className="md:col-span-3">
+                                    <button 
+                                        type="button" 
+                                        onClick={addTariff}
+                                        className="h-10 w-full bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 transition-colors shadow-sm flex items-center justify-center gap-2"
+                                    >
+                                        <Plus className="w-4 h-4" /> Add Tariff
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
-                        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden flex-1">
+                        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden flex-1 shadow-sm">
                             <table className="w-full text-sm text-left">
                                 <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs">
                                     <tr>
-                                        <th className="px-6 py-3">Tariff Name</th>
+                                        <th className="px-6 py-3 w-1/2">Tariff Name</th>
                                         <th className="px-6 py-3">Price</th>
                                         <th className="px-6 py-3">Effective Date</th>
                                         <th className="px-6 py-3 text-right">Action</th>
@@ -749,19 +751,22 @@ const ServiceMaster = () => {
                                 <tbody className="divide-y divide-slate-100">
                                     {localTariffs.length === 0 ? (
                                         <tr>
-                                            <td colSpan={4} className="px-6 py-8 text-center text-slate-400 italic">No tariffs configured for this service yet.</td>
+                                            <td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic">
+                                                No tariffs configured for this service yet.
+                                            </td>
                                         </tr>
                                     ) : (
                                         localTariffs.map(t => (
-                                            <tr key={t.id} className="hover:bg-slate-50">
-                                                <td className="px-6 py-4 font-medium text-slate-800">{t.tariffName}</td>
-                                                <td className="px-6 py-4 font-mono font-bold text-green-700">${t.price.toFixed(2)}</td>
-                                                <td className="px-6 py-4 text-slate-500">{new Date(t.effectiveDate).toLocaleDateString()}</td>
-                                                <td className="px-6 py-4 text-right">
+                                            <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-6 py-3 font-medium text-slate-800">{t.tariffName}</td>
+                                                <td className="px-6 py-3 font-mono font-bold text-green-700">${t.price.toFixed(2)}</td>
+                                                <td className="px-6 py-3 text-slate-500">{new Date(t.effectiveDate).toLocaleDateString()}</td>
+                                                <td className="px-6 py-3 text-right">
                                                     <button 
                                                         type="button" 
                                                         onClick={() => removeTariff(t.id)}
-                                                        className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded transition-colors"
+                                                        className="text-slate-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-full transition-colors inline-flex items-center justify-center"
+                                                        title="Remove Tariff"
                                                     >
                                                         <Trash2 className="w-4 h-4" />
                                                     </button>
