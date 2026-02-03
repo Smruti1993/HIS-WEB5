@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
 import { useNavigate } from 'react-router-dom';
-import { KeyRound, User, Loader2, HeartPulse, Settings } from 'lucide-react';
+import { KeyRound, User, Loader2, HeartPulse, Settings, ArrowRight } from 'lucide-react';
 
 export const Login = () => {
   const { login, isDbConnected } = useData();
@@ -24,65 +24,68 @@ export const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl overflow-hidden max-w-5xl w-full flex flex-col md:flex-row min-h-[600px] animate-in fade-in zoom-in-95 duration-500">
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 sm:p-6 lg:p-8">
+      <div className="bg-white rounded-[2rem] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] overflow-hidden max-w-[1100px] w-full flex flex-col md:flex-row min-h-[680px] animate-in fade-in zoom-in-95 duration-500 border border-slate-100">
         
         {/* Left Side - Hero / Branding */}
-        <div className="md:w-1/2 bg-gradient-to-br from-blue-600 to-indigo-800 p-12 text-white flex flex-col justify-between relative overflow-hidden">
-          {/* Decorative Elements */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
-          <div className="absolute bottom-0 left-0 w-40 h-40 bg-white opacity-5 rounded-full translate-y-1/3 -translate-x-1/3"></div>
+        <div className="md:w-5/12 bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 p-12 text-white flex flex-col justify-between relative overflow-hidden">
+          {/* Decorative Elements - Subtle gradients and shapes */}
+          <div className="absolute top-0 right-0 w-80 h-80 bg-white opacity-[0.03] rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-400 opacity-10 rounded-full translate-y-1/3 -translate-x-1/3 blur-2xl"></div>
           
-          <div className="relative z-10">
-            <div className="w-14 h-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-6 border border-white/30 shadow-lg">
-              <HeartPulse className="w-8 h-8 text-white" />
+          <div className="relative z-10 mt-4">
+            <div className="w-16 h-16 bg-white/10 backdrop-blur-xl rounded-2xl flex items-center justify-center mb-8 border border-white/20 shadow-xl">
+              <HeartPulse className="w-9 h-9 text-white" strokeWidth={1.5} />
             </div>
-            <h1 className="text-4xl font-bold mb-2">MediCore HMS</h1>
-            <p className="text-blue-100 text-lg">Next-Gen Healthcare Management System</p>
+            <h1 className="text-4xl font-extrabold mb-3 tracking-tight">MediCore HMS</h1>
+            <p className="text-blue-100 text-lg font-medium opacity-90">Next-Gen Healthcare Management</p>
           </div>
 
-          <div className="relative z-10 space-y-6">
-            <p className="text-blue-100/80 leading-relaxed max-w-sm">
+          <div className="relative z-10 space-y-8 mb-4">
+            <p className="text-blue-50/80 leading-relaxed text-base font-light">
               Streamline your hospital operations with our comprehensive, AI-powered platform. Designed for efficiency, built for care.
             </p>
-            <div className="flex gap-2">
-                <div className="h-1.5 w-8 bg-white rounded-full opacity-100"></div>
-                <div className="h-1.5 w-8 bg-white rounded-full opacity-40"></div>
-                <div className="h-1.5 w-8 bg-white rounded-full opacity-40"></div>
+            
+            <div className="flex items-center gap-3">
+                <div className="h-1.5 w-8 bg-white rounded-full opacity-100 shadow-[0_0_10px_rgba(255,255,255,0.5)]"></div>
+                <div className="h-1.5 w-2 bg-white/30 rounded-full"></div>
+                <div className="h-1.5 w-2 bg-white/30 rounded-full"></div>
             </div>
           </div>
         </div>
 
         {/* Right Side - Login Form */}
-        <div className="md:w-1/2 p-12 flex flex-col justify-center bg-white relative">
+        <div className="md:w-7/12 p-8 md:p-14 lg:p-20 flex flex-col justify-center bg-white relative">
+          
+          {/* Settings Button */}
           {!isDbConnected && (
-              <div className="absolute top-6 right-6">
+              <div className="absolute top-8 right-8">
                   <button 
                     onClick={() => navigate('/connection')} 
-                    className="flex items-center gap-2 text-xs font-bold text-red-500 bg-red-50 px-3 py-1.5 rounded-full hover:bg-red-100 transition-colors"
+                    className="flex items-center gap-2 text-xs font-bold text-red-600 bg-red-50 px-4 py-2 rounded-full hover:bg-red-100 transition-colors border border-red-100"
                   >
-                      <Settings className="w-3 h-3" /> Connect DB
+                      <Settings className="w-3.5 h-3.5" /> Configure DB
                   </button>
               </div>
           )}
 
-          <div className="max-w-sm w-full mx-auto">
-            <div className="mb-10">
-              <h2 className="text-3xl font-bold text-slate-800 mb-2">Welcome Back</h2>
-              <p className="text-slate-500">Please enter your details to sign in.</p>
+          <div className="w-full max-w-[420px] mx-auto">
+            <div className="mb-10 text-center md:text-left">
+              <h2 className="text-3xl font-bold text-slate-900 mb-3">Welcome Back</h2>
+              <p className="text-slate-500 text-sm">Please enter your credentials to access the system.</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-6">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Username</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <User className="h-5 w-5 text-slate-400" />
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-slate-700 ml-1">Username</label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none transition-colors group-focus-within:text-blue-600">
+                    <User className="h-5 w-5 text-slate-400 transition-colors" strokeWidth={1.5} />
                   </div>
                   <input
                     type="text"
                     required
-                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                    className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-[3px] focus:ring-blue-100 focus:border-blue-500 outline-none transition-all duration-200"
                     placeholder="Enter your username"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
@@ -90,42 +93,48 @@ export const Login = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Password</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <KeyRound className="h-5 w-5 text-slate-400" />
+              <div className="space-y-2">
+                <div className="flex justify-between items-center ml-1">
+                    <label className="block text-sm font-semibold text-slate-700">Password</label>
+                    <a href="#" className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline">Forgot password?</a>
+                </div>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none transition-colors group-focus-within:text-blue-600">
+                    <KeyRound className="h-5 w-5 text-slate-400 transition-colors" strokeWidth={1.5} />
                   </div>
                   <input
                     type="password"
                     required
-                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                    className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-[3px] focus:ring-blue-100 focus:border-blue-500 outline-none transition-all duration-200"
                     placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
                 </div>
-                <div className="text-right mt-2">
-                    <a href="#" className="text-xs font-semibold text-blue-600 hover:text-blue-700">Forgot password?</a>
-                </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 transition-all shadow-lg shadow-blue-200 flex items-center justify-center gap-2"
-              >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Sign In'}
-              </button>
+              <div className="pt-2">
+                <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl hover:bg-blue-700 active:scale-[0.99] focus:ring-4 focus:ring-blue-200 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 text-sm uppercase tracking-wide"
+                >
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+                        <>
+                            Sign In <ArrowRight className="w-4 h-4 ml-1" />
+                        </>
+                    )}
+                </button>
+              </div>
             </form>
 
-            <div className="mt-8 pt-6 border-t border-slate-100 text-center">
-                <p className="text-xs text-slate-400">
+            <div className="mt-10 pt-6 border-t border-slate-100 text-center">
+                <p className="text-[11px] text-slate-400 leading-relaxed max-w-xs mx-auto">
                     By accessing this system, you agree to comply with all hospital data privacy policies and HIPAA regulations.
                 </p>
-                <div className="mt-4 text-xs text-slate-400 flex justify-center gap-4">
-                    <span>v2.4.0</span>
-                    <span>•</span>
+                <div className="mt-4 flex items-center justify-center gap-2 text-[11px] font-medium text-slate-400 bg-slate-50 py-1 px-3 rounded-full w-fit mx-auto">
+                    <span>MediCore v2.4.0</span>
+                    <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
                     <span>Support: it@medicore.com</span>
                 </div>
             </div>
