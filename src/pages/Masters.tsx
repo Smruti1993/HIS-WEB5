@@ -355,9 +355,13 @@ const ServiceMaster = () => {
     };
 
     const addTariff = () => {
-        if (!newTariffName || !newTariffPrice) {
-            showToast('error', 'Please enter tariff name and price');
+        if (!newTariffName) {
+            showToast('error', 'Please enter a tariff name');
             return;
+        }
+        if (newTariffPrice === '') {
+             showToast('error', 'Please enter a price');
+             return;
         }
         
         const newTariff: ServiceTariff = {
@@ -369,7 +373,7 @@ const ServiceMaster = () => {
             status: 'Active'
         };
 
-        setLocalTariffs([...localTariffs, newTariff]);
+        setLocalTariffs(prev => [...prev, newTariff]);
         setNewTariffName('');
         setNewTariffPrice('');
     };
@@ -700,8 +704,8 @@ const ServiceMaster = () => {
 
                 {/* TARIFF TAB */}
                 {activeTab === 'tariff' && (
-                    <div className="animate-in fade-in duration-200 h-full flex flex-col">
-                        <div className="bg-white p-5 rounded-lg border border-slate-200 mb-4 shadow-sm">
+                    <div className="animate-in fade-in duration-200 space-y-6">
+                        <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
                             <h4 className="font-bold text-slate-800 text-sm mb-4 border-b border-slate-100 pb-2">Add New Tariff</h4>
                             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                                 <div className="md:col-span-6">
@@ -738,9 +742,9 @@ const ServiceMaster = () => {
                             </div>
                         </div>
 
-                        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden flex-1 shadow-sm">
+                        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
                             <table className="w-full text-sm text-left">
-                                <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs">
+                                <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs border-b border-slate-200">
                                     <tr>
                                         <th className="px-6 py-3 w-1/2">Tariff Name</th>
                                         <th className="px-6 py-3">Price</th>
@@ -758,10 +762,10 @@ const ServiceMaster = () => {
                                     ) : (
                                         localTariffs.map(t => (
                                             <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                                                <td className="px-6 py-3 font-medium text-slate-800">{t.tariffName}</td>
-                                                <td className="px-6 py-3 font-mono font-bold text-green-700">${t.price.toFixed(2)}</td>
-                                                <td className="px-6 py-3 text-slate-500">{new Date(t.effectiveDate).toLocaleDateString()}</td>
-                                                <td className="px-6 py-3 text-right">
+                                                <td className="px-6 py-4 font-medium text-slate-800">{t.tariffName}</td>
+                                                <td className="px-6 py-4 font-mono font-bold text-green-700">${t.price.toFixed(2)}</td>
+                                                <td className="px-6 py-4 text-slate-500">{new Date(t.effectiveDate).toLocaleDateString()}</td>
+                                                <td className="px-6 py-4 text-right">
                                                     <button 
                                                         type="button" 
                                                         onClick={() => removeTariff(t.id)}
