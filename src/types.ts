@@ -19,6 +19,44 @@ export interface MasterDiagnosis {
   status: 'Active' | 'Inactive';
 }
 
+// NEW: Service Master Definition
+export interface ServiceDefinition {
+  id: string;
+  code: string;
+  name: string;
+  alternateName?: string;
+  serviceType: string;
+  serviceCategory: string;
+  estDuration?: number;
+  status: 'Active' | 'Inactive';
+  chargeable: boolean;
+  applicableVisitType: 'New' | 'Follow-up' | 'Both';
+  applicableGender: 'Male' | 'Female' | 'Both';
+  reOrderDuration?: number;
+  autoCancellationDays?: number;
+  minTimeBilling?: number;
+  maxTimeBilling?: number;
+  maxOrderableQty?: number;
+  cptCode?: string;
+  nphiesCode?: string;
+  nphiesDesc?: string;
+  schedulable: boolean;
+  surgicalService: boolean;
+  individuallyOrderable: boolean;
+  autoProcessable: boolean;
+  consentRequired: boolean;
+  isRestricted: boolean;
+  isExternal: boolean;
+  isPercentageTariff: boolean;
+  isToothMandatory: boolean;
+  isAuthRequired: boolean;
+  groupName?: string;
+  billingGroupName?: string;
+  financialGroup?: string;
+  cptDescription?: string;
+  specialInstructions?: string;
+}
+
 export enum EmployeeRole {
   DOCTOR = 'Doctor',
   NURSE = 'Nurse',

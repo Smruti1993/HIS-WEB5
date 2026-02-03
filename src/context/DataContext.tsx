@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { 
   Patient, Employee, Department, Unit, ServiceCentre, 
   DoctorAvailability, Appointment, ToastMessage, Bill, BillItem, Payment,
-  VitalSign, Diagnosis, ClinicalNote, Allergy, NarrativeDiagnosis, MasterDiagnosis
+  VitalSign, Diagnosis, ClinicalNote, Allergy, NarrativeDiagnosis, MasterDiagnosis, ServiceDefinition
 } from '../types';
 import { 
     getSupabase, 
@@ -31,6 +31,9 @@ interface DataContextType {
 
   masterDiagnoses: MasterDiagnosis[];
   uploadMasterDiagnoses: (data: MasterDiagnosis[]) => Promise<void>;
+
+  serviceDefinitions: ServiceDefinition[];
+  saveServiceDefinition: (service: ServiceDefinition) => void;
   
   availabilities: DoctorAvailability[];
   saveAvailability: (avail: DoctorAvailability) => void;
@@ -76,6 +79,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [units, setUnits] = useState<Unit[]>([]);
   const [serviceCentres, setServiceCentres] = useState<ServiceCentre[]>([]);
   const [masterDiagnoses, setMasterDiagnoses] = useState<MasterDiagnosis[]>([]);
+  const [serviceDefinitions, setServiceDefinitions] = useState<ServiceDefinition[]>([]);
   const [availabilities, setAvailabilities] = useState<DoctorAvailability[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
@@ -192,6 +196,36 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       id: m.id, code: m.code, description: m.description, status: m.status
   });
 
+  const mapServiceDefFromDb = (s: any): ServiceDefinition => ({
+      id: s.id, code: s.code, name: s.name, alternateName: s.alternate_name, 
+      serviceType: s.service_type, serviceCategory: s.service_category, estDuration: s.est_duration,
+      status: s.status, chargeable: s.chargeable, applicableVisitType: s.applicable_visit_type,
+      applicableGender: s.applicable_gender, reOrderDuration: s.re_order_duration,
+      autoCancellationDays: s.auto_cancellation_days, minTimeBilling: s.min_time_billing,
+      maxTimeBilling: s.max_time_billing, maxOrderableQty: s.max_orderable_qty,
+      cptCode: s.cpt_code, nphiesCode: s.nphies_code, nphiesDesc: s.nphies_desc,
+      schedulable: s.schedulable, surgicalService: s.surgical_service, individuallyOrderable: s.individually_orderable,
+      autoProcessable: s.auto_processable, consentRequired: s.consent_required, isRestricted: s.is_restricted,
+      isExternal: s.is_external, isPercentageTariff: s.is_percentage_tariff, isToothMandatory: s.is_tooth_mandatory,
+      isAuthRequired: s.is_auth_required, groupName: s.group_name, billingGroupName: s.billing_group_name,
+      financialGroup: s.financial_group, cptDescription: s.cpt_description, specialInstructions: s.special_instructions
+  });
+  const mapServiceDefToDb = (s: any) => ({
+      id: s.id, code: s.code, name: s.name, alternate_name: s.alternateName,
+      service_type: s.serviceType, service_category: s.serviceCategory, est_duration: s.estDuration,
+      status: s.status, chargeable: s.chargeable, applicable_visit_type: s.applicableVisitType,
+      applicable_gender: s.applicableGender, re_order_duration: s.reOrderDuration,
+      auto_cancellation_days: s.autoCancellationDays, min_time_billing: s.minTimeBilling,
+      max_time_billing: s.maxTimeBilling, max_orderable_qty: s.maxOrderableQty,
+      cpt_code: s.cptCode, nphies_code: s.nphiesCode, nphies_desc: s.nphiesDesc,
+      schedulable: s.schedulable, surgical_service: s.surgicalService, individually_orderable: s.individuallyOrderable,
+      auto_processable: s.autoProcessable, consent_required: s.consentRequired, is_restricted: s.isRestricted,
+      is_external: s.isExternal, is_percentage_tariff: s.isPercentageTariff, is_tooth_mandatory: s.isToothMandatory,
+      is_auth_required: s.isAuthRequired, group_name: s.groupName, billing_group_name: s.billingGroupName,
+      financial_group: s.financialGroup, cpt_description: s.cptDescription, special_instructions: s.specialInstructions
+  });
+
+
   // --- Initial Fetch ---
 
   useEffect(() => {
@@ -209,7 +243,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const supabase = getSupabase();
 
       try {
-        const [pRes, eRes, dRes, uRes, sRes, avRes, apRes, bRes, biRes, payRes, vRes, diRes, notRes, alRes, narRes, mdRes] = await Promise.all([
+        const [pRes, eRes, dRes, uRes, sRes, avRes, apRes, bRes, biRes, payRes, vRes, diRes, notRes, alRes, narRes, mdRes, sdRes] = await Promise.all([
           supabase.from('patients').select('*'),
           supabase.from('employees').select('*'),
           supabase.from('departments').select('*'),
@@ -226,6 +260,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           supabase.from('clinical_allergies').select('*'),
           supabase.from('clinical_narrative_diagnoses').select('*'),
           supabase.from('master_diagnoses').select('*'),
+          supabase.from('service_definitions').select('*'),
         ]);
 
         if (pRes.error) throw pRes.error;
@@ -243,6 +278,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (alRes.data) setAllergies(alRes.data.map(mapAllergyFromDb));
         if (narRes.data) setNarrativeDiagnoses(narRes.data.map(mapNarrativeFromDb));
         if (mdRes.data) setMasterDiagnoses(mdRes.data.map(mapMasterDiagFromDb));
+        if (sdRes.data) setServiceDefinitions(sdRes.data.map(mapServiceDefFromDb));
 
         if (bRes.data) {
             const rawBills = bRes.data;
@@ -296,7 +332,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const disconnectDb = () => {
       clearCredentialsFromStorage();
       setIsDbConnected(false);
-      setPatients([]); setEmployees([]); setDepartments([]); setAppointments([]); setAvailabilities([]); setBills([]); setVitals([]); setDiagnoses([]); setClinicalNotes([]); setAllergies([]); setNarrativeDiagnoses([]); setMasterDiagnoses([]);
+      setPatients([]); setEmployees([]); setDepartments([]); setAppointments([]); setAvailabilities([]); setBills([]); setVitals([]); setDiagnoses([]); setClinicalNotes([]); setAllergies([]); setNarrativeDiagnoses([]); setMasterDiagnoses([]); setServiceDefinitions([]);
       showToast('info', 'Disconnected from database.');
   };
 
@@ -397,6 +433,24 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setRefreshTrigger(prev => prev + 1);
       } else {
           showToast('success', `${data.length} diagnoses imported successfully.`);
+      }
+  };
+
+  const saveServiceDefinition = async (service: ServiceDefinition) => {
+      if (!requireDb()) return;
+      setServiceDefinitions(prev => {
+          const exists = prev.find(s => s.id === service.id);
+          if (exists) return prev.map(s => s.id === service.id ? service : s);
+          return [...prev, service];
+      });
+
+      const { error } = await getSupabase().from('service_definitions').upsert(mapServiceDefToDb(service));
+      if (error) { 
+          showToast('error', `Failed to save service: ${error.message}`); 
+          // If insert failed, remove from local state
+          setServiceDefinitions(prev => prev.filter(s => s.id !== service.id));
+      } else {
+          showToast('success', 'Service saved successfully.');
       }
   };
 
@@ -503,7 +557,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setDiagnoses(prev => [...prev, diagnosis]);
       const { error } = await getSupabase().from('clinical_diagnoses').insert(mapDiagnosisToDb(diagnosis));
       if (error) { 
-          // Improve error message for common schema issues
           let msg = error.message;
           if (msg.includes('icd_code') || msg.includes('is_poa')) msg += " (Please run migration SQL)";
           showToast('error', `Failed to save diagnosis: ${msg}`); 
@@ -566,6 +619,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       units, addUnit,
       serviceCentres, addServiceCentre,
       masterDiagnoses, uploadMasterDiagnoses,
+      serviceDefinitions, saveServiceDefinition,
       availabilities, saveAvailability, deleteAvailability,
       appointments, bookAppointment, updateAppointment, cancelAppointment,
       bills, createBill, addPayment,
