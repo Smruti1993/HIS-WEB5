@@ -34,6 +34,7 @@ interface DataContextType {
 
   serviceDefinitions: ServiceDefinition[];
   saveServiceDefinition: (service: ServiceDefinition) => void;
+  uploadServiceDefinitions: (services: ServiceDefinition[]) => Promise<void>;
   
   availabilities: DoctorAvailability[];
   saveAvailability: (avail: DoctorAvailability) => void;
@@ -217,7 +218,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       applicable_gender: s.applicableGender, re_order_duration: s.reOrderDuration,
       auto_cancellation_days: s.autoCancellationDays, min_time_billing: s.minTimeBilling,
       max_time_billing: s.maxTimeBilling, max_orderable_qty: s.maxOrderableQty,
-      cpt_code: s.cptCode, nphies_code: s.nphiesCode, nphies_desc: s.nphiesDesc,
+      cpt_code: s.cptCode, nphies_code: s.nphiesCode, nphies_desc: s.nphies_desc,
       schedulable: s.schedulable, surgical_service: s.surgicalService, individually_orderable: s.individuallyOrderable,
       auto_processable: s.autoProcessable, consent_required: s.consentRequired, is_restricted: s.isRestricted,
       is_external: s.isExternal, is_percentage_tariff: s.isPercentageTariff, is_tooth_mandatory: s.isToothMandatory,
@@ -454,6 +455,23 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
   };
 
+  const uploadServiceDefinitions = async (services: ServiceDefinition[]) => {
+      if (!requireDb()) return;
+      
+      setServiceDefinitions(prev => [...prev, ...services]);
+      
+      const dbData = services.map(mapServiceDefToDb);
+
+      const { error } = await getSupabase().from('service_definitions').insert(dbData);
+      
+      if (error) {
+          showToast('error', `Bulk upload failed: ${error.message}`);
+          setRefreshTrigger(prev => prev + 1); // Revert local if needed by refetching
+      } else {
+          showToast('success', `${services.length} services imported successfully.`);
+      }
+  };
+
   const saveAvailability = async (avail: DoctorAvailability) => {
     if (!requireDb()) return;
     setAvailabilities(prev => {
@@ -619,7 +637,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       units, addUnit,
       serviceCentres, addServiceCentre,
       masterDiagnoses, uploadMasterDiagnoses,
-      serviceDefinitions, saveServiceDefinition,
+      serviceDefinitions, saveServiceDefinition, uploadServiceDefinitions,
       availabilities, saveAvailability, deleteAvailability,
       appointments, bookAppointment, updateAppointment, cancelAppointment,
       bills, createBill, addPayment,

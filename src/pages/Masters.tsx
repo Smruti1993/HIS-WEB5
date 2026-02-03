@@ -303,11 +303,12 @@ const DiagnosisUploader = () => {
 };
 
 const ServiceMaster = () => {
-    const { serviceDefinitions, saveServiceDefinition } = useData();
+    const { serviceDefinitions, saveServiceDefinition, uploadServiceDefinitions, showToast } = useData();
     const [viewMode, setViewMode] = useState<'list' | 'form'>('list');
     const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     const initialFormState: ServiceDefinition = {
         id: '', code: '', name: '', alternateName: '', serviceType: 'Single service', serviceCategory: '', estDuration: 0,
@@ -338,6 +339,68 @@ const ServiceMaster = () => {
         setViewMode('list');
     };
 
+    const handleDownloadTemplate = () => {
+        const headers = "Code,Name,ServiceType,ServiceCategory,EstDuration,Chargeable,Status,GroupName";
+        const sample = "CON001,General Consultation,Consultation,General,15,true,Active,Consultations";
+        const csvContent = "data:text/csv;charset=utf-8," + headers + "\n" + sample;
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "service_master_template.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const text = e.target?.result as string;
+            if (!text) return;
+
+            const rows = text.split('\n');
+            const newServices: ServiceDefinition[] = [];
+            
+            // Skip header row
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i].trim();
+                if (!row) continue;
+                
+                // Naive CSV split, assuming no commas in fields for now
+                const cols = row.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+                
+                if (cols.length >= 2) { // Minimum Code & Name
+                    const [code, name, type, cat, dur, chg, stat, grp] = cols;
+                    
+                    newServices.push({
+                        ...initialFormState,
+                        id: Date.now().toString() + i,
+                        code: code,
+                        name: name,
+                        serviceType: type || 'Single service',
+                        serviceCategory: cat || '',
+                        estDuration: parseInt(dur) || 0,
+                        chargeable: chg?.toLowerCase() === 'true',
+                        status: (stat === 'Inactive' ? 'Inactive' : 'Active') as any,
+                        groupName: grp || ''
+                    });
+                }
+            }
+
+            if (newServices.length > 0) {
+                await uploadServiceDefinitions(newServices);
+                if(fileInputRef.current) fileInputRef.current.value = '';
+                setCurrentPage(1);
+            } else {
+                showToast('error', 'No valid rows found in CSV.');
+            }
+        };
+        reader.readAsText(file);
+    };
+
     const filteredData = useMemo(() => {
         return serviceDefinitions.filter(s => 
             s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -353,21 +416,30 @@ const ServiceMaster = () => {
     if (viewMode === 'list') {
         return (
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <div className="px-6 py-4 border-b border-slate-100 flex flex-col xl:flex-row justify-between items-center gap-4 bg-slate-50/50">
                     <h3 className="font-semibold text-slate-800">Service Definition</h3>
-                    <div className="flex gap-3">
-                         <div className="relative">
+                    <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
+                         <div className="relative flex-1 sm:w-64">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                             <input 
-                                className="pl-9 pr-4 py-1.5 border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500"
+                                className="w-full pl-9 pr-4 py-1.5 border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500"
                                 placeholder="Search services..."
                                 value={searchTerm}
                                 onChange={e => setSearchTerm(e.target.value)}
                             />
                         </div>
-                        <button onClick={handleCreate} className="bg-blue-600 text-white text-sm px-4 py-1.5 rounded-lg flex items-center gap-2 hover:bg-blue-700">
-                            <Plus className="w-4 h-4" /> Add New
-                        </button>
+                        <div className="flex gap-2 shrink-0">
+                            <button onClick={handleDownloadTemplate} className="text-sm bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg flex items-center shadow-sm">
+                                <Download className="w-4 h-4 sm:mr-1.5" /> <span className="hidden sm:inline">Template</span>
+                            </button>
+                            <label className="text-sm bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg flex items-center shadow-sm cursor-pointer">
+                                <Upload className="w-4 h-4 sm:mr-1.5" /> <span className="hidden sm:inline">Upload CSV</span>
+                                <input type="file" accept=".csv" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
+                            </label>
+                            <button onClick={handleCreate} className="bg-blue-600 text-white text-sm px-4 py-1.5 rounded-lg flex items-center gap-2 hover:bg-blue-700 shadow-sm">
+                                <Plus className="w-4 h-4" /> Add New
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div className="overflow-x-auto min-h-[400px]">
