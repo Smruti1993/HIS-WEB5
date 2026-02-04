@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
-import { Plus, Search, Printer, DollarSign, FileText, Trash2, X, History, CreditCard } from 'lucide-react';
+import { Plus, Search, Printer, DollarSign, FileText, Trash2, X, History, CreditCard, Package, Pill, Stethoscope, Save, ArrowLeft, MoreHorizontal, CheckSquare, Square } from 'lucide-react';
 import { Bill, BillItem, Payment } from '../types';
 
 export const Billing = () => {
@@ -12,11 +12,24 @@ export const Billing = () => {
 
   // --- Create Bill Modal State ---
   const [showCreateModal, setShowCreateModal] = useState(false);
+  
+  // Header / Config State
   const [newBillPatient, setNewBillPatient] = useState('');
-  const [newBillAppt, setNewBillAppt] = useState('');
+  const [ignoreSponsor, setIgnoreSponsor] = useState(false);
+  const [selectedCarePlan, setSelectedCarePlan] = useState('');
+  const [encounterType, setEncounterType] = useState('Outpatient');
+  const [encounterStartType, setEncounterStartType] = useState('New Visit');
+  const [invoiceRemarks, setInvoiceRemarks] = useState('');
+  
+  // Items State
   const [billItems, setBillItems] = useState<Omit<BillItem, 'id'>[]>([
       { description: 'Consultation Fee', quantity: 1, unitPrice: 50, total: 50 }
   ]);
+  const [selectedItems, setSelectedItems] = useState<number[]>([]);
+
+  // Summary State (Mocked mostly as we build the UI)
+  const [deposits, setDeposits] = useState(0);
+  const [collectedAmount, setCollectedAmount] = useState(0);
 
   // --- Payment Modal State ---
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -34,6 +47,12 @@ export const Billing = () => {
       return nameMatch && statusMatch;
   }).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+  // Derived Totals
+  const patientGrossAmount = billItems.reduce((acc, item) => acc + item.total, 0);
+  const patientNetAmount = patientGrossAmount; // Minus discounts if any
+  const patientPayable = patientNetAmount;
+  const invoiceBalance = patientPayable - collectedAmount;
+
   // --- Handlers: Create Bill ---
   
   const updateItem = (index: number, field: keyof Omit<BillItem, 'id'>, value: any) => {
@@ -49,26 +68,44 @@ export const Billing = () => {
       setBillItems(newItems);
   };
 
-  const addItem = () => {
-      setBillItems([...billItems, { description: '', quantity: 1, unitPrice: 0, total: 0 }]);
+  const addItem = (description: string = '', price: number = 0) => {
+      setBillItems([...billItems, { description, quantity: 1, unitPrice: price, total: price }]);
   };
 
   const removeItem = (index: number) => {
-      if (billItems.length > 1) {
+      if (billItems.length > 0) {
           setBillItems(billItems.filter((_, i) => i !== index));
+          setSelectedItems(selectedItems.filter(i => i !== index).map(i => i > index ? i - 1 : i));
       }
   };
 
-  const handleCreateBill = (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!newBillPatient) return;
+  const toggleItemSelection = (index: number) => {
+      if (selectedItems.includes(index)) {
+          setSelectedItems(selectedItems.filter(i => i !== index));
+      } else {
+          setSelectedItems([...selectedItems, index]);
+      }
+  };
+
+  const toggleAllSelection = () => {
+      if (selectedItems.length === billItems.length) {
+          setSelectedItems([]);
+      } else {
+          setSelectedItems(billItems.map((_, i) => i));
+      }
+  };
+
+  const handleCreateBill = () => {
+      if (!newBillPatient) {
+          showToast('error', 'Please select a patient first.');
+          return;
+      }
 
       const totalAmount = billItems.reduce((sum, item) => sum + item.total, 0);
       
       const newBill: Bill = {
           id: Date.now().toString(),
           patientId: newBillPatient,
-          appointmentId: newBillAppt || undefined,
           date: new Date().toISOString(),
           status: 'Unpaid',
           totalAmount,
@@ -81,8 +118,8 @@ export const Billing = () => {
       setShowCreateModal(false);
       // Reset
       setNewBillPatient('');
-      setNewBillAppt('');
       setBillItems([{ description: 'Consultation Fee', quantity: 1, unitPrice: 50, total: 50 }]);
+      setInvoiceRemarks('');
   };
 
   // --- Handlers: Payment ---
@@ -170,145 +207,53 @@ export const Billing = () => {
             .meta { text-align: right; }
             .invoice-title { font-size: 32px; font-weight: 800; color: #0f172a; margin: 0 0 5px 0; }
             .invoice-meta { font-size: 14px; color: #64748b; line-height: 1.6; }
-            
             .columns { display: flex; justify-content: space-between; margin-bottom: 40px; gap: 40px; }
             .col-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; font-weight: 700; margin-bottom: 8px; }
             .address { font-size: 15px; line-height: 1.6; color: #334155; }
-            
             table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
             th { text-align: left; padding: 12px 0; border-bottom: 2px solid #e2e8f0; font-size: 12px; text-transform: uppercase; color: #64748b; font-weight: 600; }
             td { padding: 16px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; color: #334155; }
             .text-right { text-align: right; }
             .text-center { text-align: center; }
-            
             .totals-container { display: flex; justify-content: flex-end; margin-top: 20px; }
             .totals { width: 300px; }
             .row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; color: #64748b; }
             .total-row { font-weight: 700; font-size: 18px; color: #0f172a; border-top: 2px solid #e2e8f0; padding-top: 15px; margin-top: 10px; }
             .paid-row { color: #16a34a; font-weight: 500; }
             .due-row { color: #dc2626; font-weight: 600; font-size: 16px; border-top: 1px dashed #e2e8f0; padding-top: 10px; margin-top: 5px; }
-            
-            .status-badge { 
-                display: inline-block; padding: 6px 12px; border-radius: 99px; font-size: 12px; font-weight: 600; text-transform: uppercase; margin-top: 10px;
-            }
+            .status-badge { display: inline-block; padding: 6px 12px; border-radius: 99px; font-size: 12px; font-weight: 600; text-transform: uppercase; margin-top: 10px; }
             .status-paid { background: #dcfce7; color: #166534; }
             .status-partial { background: #ffedd5; color: #9a3412; }
             .status-unpaid { background: #fee2e2; color: #991b1b; }
-
             .payment-history { margin-top: 60px; border-top: 1px solid #e2e8f0; padding-top: 20px; }
             .payment-history h4 { font-size: 14px; font-weight: 700; margin-bottom: 15px; color: #0f172a; }
             .payment-row { display: flex; justify-content: space-between; font-size: 13px; color: #64748b; padding: 8px 0; border-bottom: 1px dashed #f1f5f9; }
-            
-            @media print {
-                body { padding: 0; }
-                .no-print { display: none; }
-            }
+            @media print { body { padding: 0; } .no-print { display: none; } }
           </style>
         </head>
         <body>
           <div class="header">
-            <div>
-              <div class="logo">MediCore HMS</div>
-              <div class="sub-logo">Excellence in Healthcare Management</div>
-            </div>
+            <div><div class="logo">MediCore HMS</div><div class="sub-logo">Excellence in Healthcare Management</div></div>
             <div class="meta">
               <h1 class="invoice-title">INVOICE</h1>
-              <div class="invoice-meta">
-                #${bill.id.slice(-6)}<br>
-                ${new Date(bill.date).toLocaleDateString()}
-              </div>
+              <div class="invoice-meta">#${bill.id.slice(-6)}<br>${new Date(bill.date).toLocaleDateString()}</div>
               <div class="status-badge status-${bill.status.toLowerCase()}">${bill.status}</div>
             </div>
           </div>
-
           <div class="columns">
-            <div style="flex: 1;">
-               <div class="col-title">From</div>
-               <div class="address">
-                 <strong>MediCore Hospital</strong><br>
-                 123 Health Avenue<br>
-                 Medical District, HC 90210<br>
-                 billing@medicore.com
-               </div>
-            </div>
-            <div style="flex: 1;">
-               <div class="col-title">Bill To</div>
-               <div class="address">
-                 <strong>${patient?.firstName} ${patient?.lastName}</strong><br>
-                 ${patient?.address || 'No address provided'}<br>
-                 ${patient?.phone || ''}<br>
-                 ${patient?.email || ''}
-               </div>
-            </div>
+            <div style="flex: 1;"><div class="col-title">From</div><div class="address"><strong>MediCore Hospital</strong><br>123 Health Avenue<br>Medical District, HC 90210<br>billing@medicore.com</div></div>
+            <div style="flex: 1;"><div class="col-title">Bill To</div><div class="address"><strong>${patient?.firstName} ${patient?.lastName}</strong><br>${patient?.address || 'No address provided'}<br>${patient?.phone || ''}<br>${patient?.email || ''}</div></div>
           </div>
-
           <table>
-            <thead>
-              <tr>
-                <th style="width: 50%;">Description</th>
-                <th class="text-center">Qty</th>
-                <th class="text-right">Unit Price</th>
-                <th class="text-right">Total</th>
-              </tr>
-            </thead>
+            <thead><tr><th style="width: 50%;">Description</th><th class="text-center">Qty</th><th class="text-right">Unit Price</th><th class="text-right">Total</th></tr></thead>
             <tbody>
-              ${bill.items.map(item => `
-                <tr>
-                  <td>
-                    <div style="font-weight: 500; color: #0f172a;">${item.description}</div>
-                  </td>
-                  <td class="text-center">${item.quantity}</td>
-                  <td class="text-right">$${item.unitPrice.toFixed(2)}</td>
-                  <td class="text-right" style="font-weight: 500;">$${item.total.toFixed(2)}</td>
-                </tr>
-              `).join('')}
+              ${bill.items.map(item => `<tr><td><div style="font-weight: 500; color: #0f172a;">${item.description}</div></td><td class="text-center">${item.quantity}</td><td class="text-right">$${item.unitPrice.toFixed(2)}</td><td class="text-right" style="font-weight: 500;">$${item.total.toFixed(2)}</td></tr>`).join('')}
             </tbody>
           </table>
-
-          <div class="totals-container">
-            <div class="totals">
-               <div class="row">
-                 <span>Subtotal</span>
-                 <span>$${bill.totalAmount.toFixed(2)}</span>
-               </div>
-               <div class="row">
-                 <span>Tax (0%)</span>
-                 <span>$0.00</span>
-               </div>
-               <div class="row total-row">
-                 <span>Total</span>
-                 <span>$${bill.totalAmount.toFixed(2)}</span>
-               </div>
-               <div class="row paid-row">
-                 <span>Amount Paid</span>
-                 <span>$${bill.paidAmount.toFixed(2)}</span>
-               </div>
-               <div class="row due-row">
-                 <span>Balance Due</span>
-                 <span>$${(bill.totalAmount - bill.paidAmount).toFixed(2)}</span>
-               </div>
-            </div>
-          </div>
-
-          ${bill.payments && bill.payments.length > 0 ? `
-            <div class="payment-history">
-              <h4>Payment History</h4>
-              ${bill.payments.map(p => `
-                <div class="payment-row">
-                   <span>${new Date(p.date).toLocaleDateString()} &mdash; ${p.method} ${p.reference ? `(${p.reference})` : ''}</span>
-                   <span>$${p.amount.toFixed(2)}</span>
-                </div>
-              `).join('')}
-            </div>
-          ` : ''}
-          
-          <div style="margin-top: 50px; text-align: center; color: #94a3b8; font-size: 12px;">
-             Thank you for choosing MediCore HMS. Get well soon!
-          </div>
-
-          <script>
-            setTimeout(() => { window.print(); }, 500);
-          </script>
+          <div class="totals-container"><div class="totals"><div class="row"><span>Subtotal</span><span>$${bill.totalAmount.toFixed(2)}</span></div><div class="row"><span>Tax (0%)</span><span>$0.00</span></div><div class="row total-row"><span>Total</span><span>$${bill.totalAmount.toFixed(2)}</span></div><div class="row paid-row"><span>Amount Paid</span><span>$${bill.paidAmount.toFixed(2)}</span></div><div class="row due-row"><span>Balance Due</span><span>$${(bill.totalAmount - bill.paidAmount).toFixed(2)}</span></div></div></div>
+          ${bill.payments && bill.payments.length > 0 ? `<div class="payment-history"><h4>Payment History</h4>${bill.payments.map(p => `<div class="payment-row"><span>${new Date(p.date).toLocaleDateString()} &mdash; ${p.method} ${p.reference ? `(${p.reference})` : ''}</span><span>$${p.amount.toFixed(2)}</span></div>`).join('')}</div>` : ''}
+          <div style="margin-top: 50px; text-align: center; color: #94a3b8; font-size: 12px;">Thank you for choosing MediCore HMS. Get well soon!</div>
+          <script>setTimeout(() => { window.print(); }, 500);</script>
         </body>
         </html>
       `;
@@ -425,133 +370,286 @@ export const Billing = () => {
         </div>
       </div>
 
-      {/* CREATE INVOICE MODAL */}
+      {/* NEW COMPLEX CREATE INVOICE MODAL */}
       {showCreateModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-              <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl p-6 m-4 max-h-[90vh] overflow-y-auto">
-                  <div className="flex justify-between items-center mb-6">
-                      <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                          <FileText className="w-6 h-6 text-blue-600" /> Create New Invoice
-                      </h3>
-                      <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-slate-600">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-[95vw] h-[90vh] flex flex-col overflow-hidden border border-slate-200">
+                  
+                  {/* 1. Header & Configuration Area */}
+                  <div className="bg-blue-600 text-white p-3 shrink-0 flex justify-between items-center shadow-md">
+                      <div className="flex items-center gap-4 flex-1">
+                          <div className="bg-white/20 p-1.5 rounded-lg">
+                              <FileText className="w-5 h-5 text-white" />
+                          </div>
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                              <select 
+                                className="bg-blue-700 border border-blue-500 text-white text-sm rounded px-3 py-1.5 outline-none focus:ring-2 focus:ring-white/50 w-64 font-medium"
+                                value={newBillPatient}
+                                onChange={e => setNewBillPatient(e.target.value)}
+                              >
+                                  <option value="">Select Patient</option>
+                                  {patients.map(p => <option key={p.id} value={p.id}>{p.firstName} {p.lastName} ({p.phone})</option>)}
+                              </select>
+                              <div className="h-6 w-px bg-blue-500 hidden sm:block"></div>
+                              <label className="flex items-center gap-2 text-sm font-medium cursor-pointer hover:bg-blue-700/50 px-2 py-1 rounded transition-colors">
+                                  <input 
+                                    type="checkbox" 
+                                    className="rounded border-blue-400 bg-blue-700 text-white" 
+                                    checked={ignoreSponsor}
+                                    onChange={e => setIgnoreSponsor(e.target.checked)}
+                                  />
+                                  Ignore Sponsor
+                              </label>
+                              <div className="flex items-center gap-2">
+                                  <span className="text-blue-200 text-xs font-bold uppercase">Care Plans:</span>
+                                  <select 
+                                    className="bg-blue-700 border border-blue-500 text-white text-xs rounded px-2 py-1.5 outline-none w-48"
+                                    value={selectedCarePlan}
+                                    onChange={e => setSelectedCarePlan(e.target.value)}
+                                  >
+                                      <option value="">Select Plan(s)</option>
+                                      <option value="Self Pay">Self Pay</option>
+                                      <option value="Insurance A">Insurance A</option>
+                                  </select>
+                              </div>
+                          </div>
+                      </div>
+                      <button onClick={() => setShowCreateModal(false)} className="text-blue-200 hover:text-white hover:bg-blue-700 p-1 rounded-full transition-colors">
                           <X className="w-6 h-6" />
                       </button>
                   </div>
 
-                  <form onSubmit={handleCreateBill} className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div>
-                              <label className="form-label">Patient</label>
-                              <select 
-                                  required 
-                                  className="form-input"
-                                  value={newBillPatient}
-                                  onChange={e => setNewBillPatient(e.target.value)}
-                              >
-                                  <option value="">Select Patient</option>
-                                  {patients.map(p => <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>)}
+                  {/* 2. Toolbar Actions */}
+                  <div className="bg-gradient-to-b from-slate-50 to-slate-100 p-2 border-b border-slate-300 flex flex-wrap gap-2 shrink-0 shadow-inner">
+                      <button onClick={() => addItem('New Service', 0)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm transition-all border border-blue-700">
+                          <Stethoscope className="w-3.5 h-3.5" /> Add Services
+                      </button>
+                      <button onClick={() => addItem('Package Deal', 100)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm transition-all border border-blue-700">
+                          <Package className="w-3.5 h-3.5" /> Add Packages
+                      </button>
+                      <button onClick={() => addItem()} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm transition-all border border-blue-700">
+                          <Plus className="w-3.5 h-3.5" /> Add Direct services
+                      </button>
+                      <button onClick={() => addItem('Paracetamol', 5)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm transition-all border border-blue-700">
+                          <Pill className="w-3.5 h-3.5" /> Add Drugs
+                      </button>
+                      
+                      <div className="h-6 w-px bg-slate-300 mx-1"></div>
+                      
+                      <button className="flex items-center gap-1.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-bold px-3 py-1.5 rounded shadow-sm transition-all">
+                          Diagnosis
+                      </button>
+                      <button className="flex items-center gap-1.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-bold px-3 py-1.5 rounded shadow-sm transition-all">
+                          Unbill Items
+                      </button>
+                      <button className="flex items-center gap-1.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-bold px-3 py-1.5 rounded shadow-sm transition-all">
+                          Cancel Items
+                      </button>
+                  </div>
+
+                  {/* 3. Filters & Grid Area */}
+                  <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
+                      {/* Filter Row */}
+                      <div className="bg-white border-b border-slate-200 px-4 py-2 flex flex-wrap items-center gap-4 text-xs">
+                          <button 
+                            onClick={toggleAllSelection} 
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded font-bold transition-colors"
+                          >
+                              Select All
+                          </button>
+                          
+                          <div className="flex items-center gap-2 ml-auto">
+                              <span className="text-slate-500 font-bold">Encounter Type :</span>
+                              <select value={encounterType} onChange={e => setEncounterType(e.target.value)} className="border border-slate-300 rounded px-2 py-1 bg-white text-slate-700 outline-none focus:border-blue-500">
+                                  <option>-- Select --</option>
+                                  <option value="Outpatient">Outpatient</option>
+                                  <option value="Inpatient">Inpatient</option>
                               </select>
                           </div>
-                          <div>
-                              <label className="form-label">Link Appointment (Optional)</label>
-                              <select 
-                                  className="form-input"
-                                  value={newBillAppt}
-                                  onChange={e => setNewBillAppt(e.target.value)}
-                              >
-                                  <option value="">None</option>
-                                  {appointments
-                                      .filter(a => a.patientId === newBillPatient && a.status === 'Completed')
-                                      .map(a => <option key={a.id} value={a.id}>{new Date(a.date).toLocaleDateString()} - {a.time}</option>)
-                                  }
+                          
+                          <div className="flex items-center gap-2">
+                              <span className="text-slate-500 font-bold">Encounter Start Type :</span>
+                              <select value={encounterStartType} onChange={e => setEncounterStartType(e.target.value)} className="border border-slate-300 rounded px-2 py-1 bg-white text-slate-700 outline-none focus:border-blue-500">
+                                  <option>-- Select --</option>
+                                  <option value="New Visit">New Visit</option>
+                                  <option value="Follow-up">Follow-up</option>
+                              </select>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                              <span className="text-slate-500 font-bold">Encounter End Type :</span>
+                              <select className="border border-slate-300 rounded px-2 py-1 bg-white text-slate-700 outline-none focus:border-blue-500">
+                                  <option>-- Select --</option>
+                                  <option>Home</option>
+                                  <option>Admit</option>
                               </select>
                           </div>
                       </div>
 
-                      <div>
-                          <label className="form-label mb-2 flex justify-between">
-                              <span>Bill Items</span>
-                          </label>
-                          <div className="border rounded-lg overflow-hidden">
-                              <table className="w-full text-sm">
-                                  <thead className="bg-slate-50 text-slate-500">
-                                      <tr>
-                                          <th className="px-4 py-2 text-left">Description</th>
-                                          <th className="px-4 py-2 w-24">Qty</th>
-                                          <th className="px-4 py-2 w-32">Unit Price</th>
-                                          <th className="px-4 py-2 w-32 text-right">Total</th>
-                                          <th className="px-4 py-2 w-10"></th>
-                                      </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-100">
-                                      {billItems.map((item, idx) => (
-                                          <tr key={idx}>
-                                              <td className="p-2">
+                      {/* Items Grid */}
+                      <div className="flex-1 overflow-auto bg-white">
+                          <table className="w-full text-sm text-left border-collapse">
+                              <thead className="bg-slate-100 text-slate-600 text-xs uppercase sticky top-0 z-10 shadow-sm font-bold">
+                                  <tr>
+                                      <th className="p-3 border-r border-slate-200 w-10 text-center"><Square className="w-4 h-4 mx-auto" /></th>
+                                      <th className="p-3 border-r border-slate-200">Description</th>
+                                      <th className="p-3 border-r border-slate-200 w-24 text-center">Qty</th>
+                                      <th className="p-3 border-r border-slate-200 w-32 text-right">Unit Price</th>
+                                      <th className="p-3 border-r border-slate-200 w-32 text-right">Total</th>
+                                      <th className="p-3 w-16 text-center">Action</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                  {billItems.length === 0 ? (
+                                      <tr><td colSpan={6} className="p-12 text-center text-slate-400 italic">No items added. Use the toolbar to add services.</td></tr>
+                                  ) : (
+                                      billItems.map((item, idx) => (
+                                          <tr key={idx} className={`hover:bg-blue-50 transition-colors group ${selectedItems.includes(idx) ? 'bg-blue-50' : ''}`}>
+                                              <td className="p-3 border-r border-slate-200 text-center">
+                                                  <button onClick={() => toggleItemSelection(idx)} className="text-slate-400 hover:text-blue-600">
+                                                      {selectedItems.includes(idx) ? <CheckSquare className="w-4 h-4 mx-auto text-blue-600" /> : <Square className="w-4 h-4 mx-auto" />}
+                                                  </button>
+                                              </td>
+                                              <td className="p-2 border-r border-slate-200">
                                                   <input 
-                                                      className="w-full border-none bg-transparent outline-none focus:ring-1 focus:ring-blue-200 rounded px-2"
+                                                      className="w-full bg-transparent outline-none border border-transparent focus:border-blue-300 rounded px-2 py-1 font-medium text-slate-700"
                                                       placeholder="Item description"
                                                       value={item.description}
                                                       onChange={e => updateItem(idx, 'description', e.target.value)}
                                                   />
                                               </td>
-                                              <td className="p-2">
+                                              <td className="p-2 border-r border-slate-200">
                                                   <input 
                                                       type="number" min="1"
-                                                      className="w-full border-none bg-transparent outline-none focus:ring-1 focus:ring-blue-200 rounded px-2"
+                                                      className="w-full bg-transparent outline-none border border-transparent focus:border-blue-300 rounded px-2 py-1 text-center"
                                                       value={item.quantity}
                                                       onChange={e => updateItem(idx, 'quantity', e.target.value)}
                                                   />
                                               </td>
-                                              <td className="p-2">
+                                              <td className="p-2 border-r border-slate-200">
                                                   <input 
                                                       type="number" min="0" step="0.01"
-                                                      className="w-full border-none bg-transparent outline-none focus:ring-1 focus:ring-blue-200 rounded px-2"
+                                                      className="w-full bg-transparent outline-none border border-transparent focus:border-blue-300 rounded px-2 py-1 text-right font-mono"
                                                       value={item.unitPrice}
                                                       onChange={e => updateItem(idx, 'unitPrice', e.target.value)}
                                                   />
                                               </td>
-                                              <td className="p-2 text-right font-medium">
-                                                  ${item.total.toFixed(2)}
+                                              <td className="p-3 border-r border-slate-200 text-right font-bold text-slate-700 font-mono">
+                                                  {item.total.toFixed(2)}
                                               </td>
-                                              <td className="p-2 text-center">
-                                                  <button type="button" onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600">
-                                                      <Trash2 className="w-4 h-4" />
+                                              <td className="p-3 text-center">
+                                                  <button onClick={() => removeItem(idx)} className="text-slate-300 hover:text-red-500 transition-colors">
+                                                      <Trash2 className="w-4 h-4 mx-auto" />
                                                   </button>
                                               </td>
                                           </tr>
-                                      ))}
-                                  </tbody>
-                              </table>
-                          </div>
-                          <button 
-                              type="button" 
-                              onClick={addItem}
-                              className="mt-2 text-sm text-blue-600 font-medium hover:text-blue-700 flex items-center gap-1"
-                          >
-                              <Plus className="w-4 h-4" /> Add Item
-                          </button>
+                                      ))
+                                  )}
+                              </tbody>
+                          </table>
                       </div>
+                  </div>
 
-                      <div className="flex justify-end items-center gap-4 pt-4 border-t border-slate-100">
-                          <div className="text-right">
-                              <span className="text-sm text-slate-500">Total Amount</span>
-                              <div className="text-2xl font-bold text-slate-800">
-                                  ${billItems.reduce((acc, curr) => acc + curr.total, 0).toFixed(2)}
+                  {/* 4. Bottom Summary & Actions (The Complex Footer) */}
+                  <div className="bg-slate-50 border-t border-slate-300 shrink-0">
+                      
+                      {/* Top Part of Footer: Remarks & Patient Summary */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
+                          {/* Remarks */}
+                          <div className="space-y-4">
+                              <div className="text-xs font-bold text-slate-700">Cancellation Summary</div>
+                              <div className="flex gap-4 items-start">
+                                  <div className="flex-1">
+                                      <label className="text-xs font-bold text-slate-500 mb-1 block">Invoice Remarks :</label>
+                                      <textarea 
+                                          className="w-full border border-slate-300 rounded p-2 text-xs h-16 outline-none focus:border-blue-500 resize-none bg-white"
+                                          value={invoiceRemarks}
+                                          onChange={e => setInvoiceRemarks(e.target.value)}
+                                      ></textarea>
+                                  </div>
+                                  <div className="w-1/3">
+                                      <label className="text-xs font-bold text-slate-500 mb-1 block flex justify-between">
+                                          Remarks : <Plus className="w-3 h-3 text-green-600 cursor-pointer" />
+                                      </label>
+                                      <select className="w-full border border-slate-300 rounded p-1 text-xs outline-none bg-white">
+                                          <option>-- Select --</option>
+                                      </select>
+                                  </div>
                               </div>
                           </div>
-                          <button 
-                              type="submit" 
-                              className="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 transition-colors"
-                          >
-                              Generate Invoice
-                          </button>
+
+                          {/* Patient Summary Box */}
+                          <div className="flex justify-end">
+                              <div className="w-80 border border-blue-200 rounded-lg overflow-hidden bg-white shadow-sm">
+                                  <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-3 py-1.5 text-white text-xs font-bold uppercase">Patient Summary</div>
+                                  <div className="p-2 space-y-1 text-xs">
+                                      <div className="flex justify-between border-b border-dashed border-slate-200 pb-1">
+                                          <span className="font-bold text-slate-700">Patient Gross Amount</span>
+                                          <span className="font-mono text-slate-800">{patientGrossAmount.toFixed(2)}</span>
+                                      </div>
+                                      <div className="flex justify-between border-b border-dashed border-slate-200 pb-1">
+                                          <span className="font-bold text-slate-700">Patient Net Amount</span>
+                                          <span className="font-mono text-slate-800">{patientNetAmount.toFixed(2)}</span>
+                                      </div>
+                                      <div className="flex justify-between pt-1">
+                                          <span className="font-extrabold text-slate-900">Patient Payable</span>
+                                          <span className="font-mono font-bold text-slate-900">{patientPayable.toFixed(2)}</span>
+                                      </div>
+                                  </div>
+                              </div>
+                          </div>
                       </div>
-                  </form>
+
+                      {/* Payment Summary Strip (Blue Gradient) */}
+                      <div className="bg-gradient-to-b from-blue-100 to-blue-200 border-y border-blue-300 px-4 py-2 grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-2 text-xs">
+                          <div className="flex justify-between font-bold text-slate-700"><span>Deposits / Credits</span><span className="font-mono text-slate-900">{deposits.toFixed(2)}</span></div>
+                          <div className="flex justify-between font-bold text-slate-700"><span>Adjusted Amount</span><span className="font-mono text-slate-900">0.00</span></div>
+                          <div className="flex justify-between font-bold text-slate-700"><span>Collected Amount</span><span className="font-mono text-slate-900">{collectedAmount.toFixed(2)}</span></div>
+                          <div className="flex justify-between font-bold text-slate-700"><span>Deposit Balance</span><span className="font-mono text-slate-900">0.00</span></div>
+                          <div className="flex justify-between font-bold text-slate-700"><span>Invoice Balance</span><span className="font-mono text-slate-900">{invoiceBalance.toFixed(2)}</span></div>
+                          <div className="flex justify-between font-bold text-red-600"><span>Doc. Suggested Amount.</span><span className="font-mono">0.00</span></div>
+                      </div>
+
+                      {/* Action Bar */}
+                      <div className="bg-slate-100 p-3 flex flex-col md:flex-row justify-between items-center gap-4">
+                          <div className="flex items-center gap-4">
+                              <button className="bg-slate-300 hover:bg-slate-400 text-slate-800 px-4 py-1.5 rounded text-xs font-bold border border-slate-400 shadow-sm transition-colors">
+                                  Adjust Receipt
+                              </button>
+                              <span className="text-xs text-slate-500 italic">No Advance available for the Patient</span>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 cursor-pointer">
+                                  Apply Off Duty : <input type="checkbox" className="rounded" />
+                              </label>
+                              
+                              <button onClick={handleCreateBill} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-1.5 rounded text-xs font-bold shadow-md transition-colors flex items-center gap-1">
+                                  <Save className="w-3.5 h-3.5" /> Save And Approve
+                              </button>
+                              
+                              <button className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded text-xs font-bold shadow-md transition-colors">
+                                  Export
+                              </button>
+                              
+                              <button onClick={() => setShowCreateModal(false)} className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded text-xs font-bold shadow-md transition-colors flex items-center gap-1">
+                                  <ArrowLeft className="w-3.5 h-3.5" /> Back
+                              </button>
+                              
+                              <div className="relative group">
+                                  <button className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded text-xs font-bold shadow-md transition-colors flex items-center gap-1">
+                                      Print <MoreHorizontal className="w-3.5 h-3.5" />
+                                  </button>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+
               </div>
           </div>
       )}
 
-      {/* PAYMENT MODAL */}
+      {/* PAYMENT MODAL (Existing Code, slightly cleaned up for context) */}
       {showPaymentModal && selectedBill && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
               <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 m-4">
