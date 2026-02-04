@@ -389,23 +389,25 @@ export const Billing = () => {
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-2">
                                             {bill.status !== 'Paid' && bill.status !== 'Cancelled' && (
-                                                <>
-                                                    <button 
-                                                        onClick={() => openPaymentModal(bill)}
-                                                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                        title="Record Payment"
-                                                    >
-                                                        <DollarSign className="w-4 h-4" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setBillToCancel(bill.id)}
-                                                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                        title="Cancel Invoice"
-                                                    >
-                                                        <Ban className="w-4 h-4" />
-                                                    </button>
-                                                </>
+                                                <button 
+                                                    onClick={() => openPaymentModal(bill)}
+                                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                    title="Record Payment"
+                                                >
+                                                    <DollarSign className="w-4 h-4" />
+                                                </button>
                                             )}
+                                            
+                                            {bill.status !== 'Cancelled' && (
+                                                <button
+                                                    onClick={() => setBillToCancel(bill.id)}
+                                                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                    title="Cancel Invoice"
+                                                >
+                                                    <Ban className="w-4 h-4" />
+                                                </button>
+                                            )}
+
                                             <button 
                                                 onClick={() => handlePrint(bill)}
                                                 className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
