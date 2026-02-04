@@ -4,7 +4,7 @@ import { useData } from '../context/DataContext';
 import { 
   User, Info, Save, Printer, FileText, Bell, Activity, Stethoscope, Briefcase, 
   Pill, Clock, FileInput, ChevronRight, ChevronDown, 
-  Bold, Italic, Underline, List, AlignLeft, Type, Download, XCircle, Cloud, CheckCircle, Loader2, Calculator, Plus, Trash2, Search, RotateCcw, History, AlertTriangle, ArrowLeft, Calendar
+  Bold, Italic, Underline, List, AlignLeft, Type, Download, XCircle, Cloud, CheckCircle, Loader2, Calculator, Plus, Trash2, Search, RotateCcw, History, AlertTriangle, ArrowLeft, Calendar, Wind, Scale
 } from 'lucide-react';
 import { VitalSign, Allergy, Diagnosis } from '../types';
 
@@ -53,7 +53,6 @@ const FALLBACK_ICD_CODES = [
 // --- Components ---
 
 const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, onClose: () => void }) => {
-    // ... (Existing Vitals Modal Code)
     const { vitals, saveVitalSign } = useData();
     const existingVital = vitals.find(v => v.appointmentId === appointmentId);
 
@@ -118,78 +117,119 @@ const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, o
         onClose();
     };
 
-    const rows = [
-        { label: 'Temperature', key: 'temperature', unit: '°C', range: '36.5 - 37.4' },
-        { label: 'Intravascular systolic', key: 'sys', unit: 'mmHg', range: '95.0 - 140.0' },
-        { label: 'Intravascular diastolic', key: 'dia', unit: 'mmHg', range: '60.0 - 90.0' },
-        { label: 'Pulse', key: 'pulse', unit: 'bpm', range: '50.0 - 80.0' },
-        { label: 'RR', key: 'rr', unit: 'bpm', range: '12.0 - 20.0' },
-        { label: 'MAP', key: 'map', unit: 'mmHg', range: '60.0 - 110.0', isCalc: true },
-        { label: 'Oxygen Saturation', key: 'spo2', unit: '%', range: '94.0 - 100.0' },
-        { label: 'Height', key: 'height', unit: 'cm', range: '100.0 - 270.0' },
-        { label: 'Weight', key: 'weight', unit: 'kg', range: '55.0 - 80.0' },
-        { label: 'BMI', key: 'bmi', unit: 'kg/m²', range: '18.5 - 24.9', isCalc: true },
-        { label: 'History of tobacco use', key: 'tobacco', unit: '', range: 'Details' },
-    ];
+    const VitalField = ({ label, _key, unit, range, isCalc = false, placeholder = '-' }: any) => (
+        <div className="flex flex-col gap-1">
+          <div className="flex justify-between items-end mb-1">
+            <label className="text-xs font-semibold text-slate-600">{label}</label>
+            <span className="text-[10px] text-slate-400">{range}</span>
+          </div>
+          <div className="relative">
+            <input
+              type={_key === 'tobacco' ? 'text' : 'number'}
+              step="0.1"
+              className={`w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${isCalc ? 'bg-slate-100 text-slate-500 font-bold' : 'bg-white'}`}
+              value={(formData as any)[_key]}
+              readOnly={isCalc}
+              placeholder={placeholder}
+              onChange={e => setFormData({...formData, [_key]: e.target.value})}
+            />
+            {unit && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">{unit}</span>}
+          </div>
+          {!isCalc && (
+              <input
+                className="w-full text-[10px] border-b border-transparent hover:border-slate-300 focus:border-blue-400 bg-transparent outline-none placeholder-slate-300 transition-colors py-0.5"
+                placeholder="Add remark..."
+                value={formData.remarks[_key] || ''}
+                onChange={e => handleRemarkChange(_key, e.target.value)}
+              />
+          )}
+        </div>
+    );
 
     return (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[85vh] overflow-hidden animate-in zoom-in-95 duration-200">
-                <div className="bg-slate-800 px-5 py-3 flex justify-between items-center text-white shrink-0">
-                    <h3 className="font-bold text-base flex items-center gap-2">
-                        <Activity className="w-5 h-5 text-blue-400" /> Record Vital Signs
-                    </h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
-                        <XCircle className="w-5 h-5" />
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 overflow-hidden">
+                {/* Header */}
+                <div className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center shrink-0">
+                    <div>
+                        <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                            <Activity className="w-5 h-5 text-blue-600" /> Vital Signs
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-0.5">Record patient physiological parameters</p>
+                    </div>
+                    <button onClick={onClose} className="p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+                        <XCircle className="w-6 h-6" />
                     </button>
                 </div>
-                <div className="flex-1 overflow-y-auto p-0">
-                    <table className="w-full text-sm border-collapse">
-                        <thead className="bg-slate-100 text-slate-600 sticky top-0 z-10 shadow-sm text-xs uppercase">
-                            <tr>
-                                <th className="px-4 py-3 font-semibold text-left w-[25%] border-b border-slate-200">Vital Sign</th>
-                                <th className="px-4 py-3 font-semibold text-left w-[20%] border-b border-slate-200">Value</th>
-                                <th className="px-4 py-3 font-semibold text-left w-[10%] border-b border-slate-200">Unit</th>
-                                <th className="px-4 py-3 font-semibold text-left w-[20%] border-b border-slate-200 hidden sm:table-cell">Ref. Range</th>
-                                <th className="px-4 py-3 font-semibold text-left border-b border-slate-200">Remarks</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {rows.map((row, idx) => (
-                                <tr key={row.key} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-4 py-2.5 font-medium text-slate-700">{row.label}</td>
-                                    <td className="px-4 py-2.5">
-                                        <div className="relative">
-                                            <input 
-                                                type={row.key === 'tobacco' ? 'text' : 'number'}
-                                                step="0.1"
-                                                className={`w-full border border-slate-300 rounded px-2 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all ${row.isCalc ? 'bg-slate-50 text-slate-500 font-semibold' : ''}`}
-                                                value={(formData as any)[row.key]}
-                                                readOnly={row.isCalc}
-                                                placeholder={row.isCalc ? 'Auto' : '-'}
-                                                onChange={e => setFormData({...formData, [row.key]: e.target.value})}
-                                            />
-                                            {row.isCalc && <Calculator className="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />}
-                                        </div>
-                                    </td>
-                                    <td className="px-4 py-2.5 text-xs text-slate-500">{row.unit}</td>
-                                    <td className="px-4 py-2.5 text-xs text-slate-500 hidden sm:table-cell">{row.range}</td>
-                                    <td className="px-4 py-2.5">
-                                        <input 
-                                            className="w-full border-b border-transparent hover:border-slate-300 focus:border-blue-500 px-1 py-1 text-sm outline-none bg-transparent transition-colors placeholder-slate-300"
-                                            placeholder="Add remark..."
-                                            value={formData.remarks[row.key] || ''}
-                                            onChange={e => handleRemarkChange(row.key, e.target.value)}
-                                        />
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+
+                <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        
+                        {/* Card 1: Blood Pressure & Heart */}
+                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                            <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2 uppercase tracking-wide border-b border-slate-100 pb-2">
+                                <Activity className="w-4 h-4 text-red-500" /> Cardiovascular
+                            </h4>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-6">
+                                <VitalField label="BP Systolic" _key="sys" unit="mmHg" range="90-140" />
+                                <VitalField label="BP Diastolic" _key="dia" unit="mmHg" range="60-90" />
+                                <VitalField label="Pulse Rate" _key="pulse" unit="bpm" range="60-100" />
+                                <VitalField label="MAP" _key="map" unit="mmHg" range="70-100" isCalc />
+                            </div>
+                        </div>
+
+                        {/* Card 2: Respiratory & Temp */}
+                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                            <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2 uppercase tracking-wide border-b border-slate-100 pb-2">
+                                <Wind className="w-4 h-4 text-blue-500" /> Respiratory & General
+                            </h4>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-6">
+                                <VitalField label="Temperature" _key="temperature" unit="°C" range="36.5-37.5" />
+                                <VitalField label="SpO2" _key="spo2" unit="%" range="95-100" />
+                                <VitalField label="Resp. Rate" _key="rr" unit="bpm" range="12-20" />
+                            </div>
+                        </div>
+
+                        {/* Card 3: Anthropometry */}
+                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm md:col-span-2">
+                            <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2 uppercase tracking-wide border-b border-slate-100 pb-2">
+                                <Scale className="w-4 h-4 text-emerald-500" /> Anthropometry
+                            </h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                <VitalField label="Height" _key="height" unit="cm" />
+                                <VitalField label="Weight" _key="weight" unit="kg" />
+                                <VitalField label="BMI" _key="bmi" unit="kg/m²" isCalc />
+                            </div>
+                        </div>
+
+                        {/* Card 4: History */}
+                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm md:col-span-2">
+                            <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2 uppercase tracking-wide border-b border-slate-100 pb-2">
+                                <History className="w-4 h-4 text-purple-500" /> Social History
+                            </h4>
+                            <div className="grid grid-cols-1">
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-xs font-semibold text-slate-600">Tobacco Use History</label>
+                                    <input
+                                        type="text"
+                                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        value={formData.tobacco}
+                                        placeholder="e.g. Smoker, Non-smoker, Ex-smoker..."
+                                        onChange={e => setFormData({...formData, tobacco: e.target.value})}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
                 </div>
-                <div className="p-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-200 shrink-0">
-                    <button onClick={onClose} className="px-5 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-medium hover:bg-white hover:border-slate-400 transition-colors">Cancel</button>
-                    <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-bold shadow-md shadow-blue-200 transition-all flex items-center gap-2"><Save className="w-4 h-4" /> Save Vitals</button>
+
+                {/* Footer */}
+                <div className="bg-white border-t border-slate-200 p-4 flex justify-end gap-3 shrink-0">
+                    <button onClick={onClose} className="px-5 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 transition-colors">Cancel</button>
+                    <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2.5 rounded-lg font-bold shadow-md shadow-blue-200 transition-all flex items-center gap-2">
+                        <Save className="w-4 h-4" /> Save Vitals
+                    </button>
                 </div>
             </div>
         </div>
