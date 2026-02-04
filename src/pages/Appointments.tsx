@@ -6,12 +6,12 @@ import { Sparkles, Loader2, Calendar, Clock, AlertCircle, Filter, RefreshCw, XCi
 export const Appointments = () => {
   const { 
     departments, employees, availabilities, appointments, 
-    bookAppointment, cancelAppointment, patients, allergies 
+    bookAppointment, cancelAppointment, patients, allergies, showToast
   } = useData();
 
   // --- Booking State ---
   const [symptoms, setSymptoms] = useState('');
-  const [aiAnalysis, setAiAnalysis] = useState<{departmentName: string, urgency: string, reasoning: string} | null>(null);
+  const [aiAnalysis, setAiAnalysis] = useState<{departmentName: string | null, urgency: string, reasoning: string} | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const [selectedDept, setSelectedDept] = useState('');
@@ -37,8 +37,13 @@ export const Appointments = () => {
 
   // --- Handlers ---
   const handleAiTriage = async () => {
-    if (!symptoms) return;
+    if (!symptoms.trim()) {
+        showToast('info', 'Please describe the symptoms first.');
+        return;
+    }
+    
     setIsAnalyzing(true);
+    setAiAnalysis(null);
     
     let patientContext: { age?: number; gender?: string; allergies?: string[] } = {};
     
@@ -55,13 +60,33 @@ export const Appointments = () => {
         };
     }
 
-    const result = await analyzeSymptoms(symptoms, departments.map(d => d.name), patientContext);
-    setIsAnalyzing(false);
-    
-    if (result) {
-      setAiAnalysis(result);
-      const dept = departments.find(d => d.name === result.departmentName);
-      if (dept) setSelectedDept(dept.id);
+    try {
+        const result = await analyzeSymptoms(symptoms, departments.map(d => d.name), patientContext);
+        
+        if (result) {
+            // Check for API Key specific error returned by service
+            if (result.departmentName === null && result.reasoning?.includes('API Key')) {
+                showToast('error', result.reasoning);
+            } else {
+                setAiAnalysis(result);
+                if (result.departmentName) {
+                    const dept = departments.find(d => d.name === result.departmentName);
+                    if (dept) {
+                        setSelectedDept(dept.id);
+                        showToast('success', `Suggesting ${dept.name}`);
+                    } else {
+                        showToast('info', `Suggested department '${result.departmentName}' not found in system.`);
+                    }
+                }
+            }
+        } else {
+            showToast('error', 'AI Analysis failed to return a result. Please try again.');
+        }
+    } catch (error) {
+        console.error(error);
+        showToast('error', 'An error occurred during symptom analysis.');
+    } finally {
+        setIsAnalyzing(false);
     }
   };
 
@@ -212,7 +237,7 @@ export const Appointments = () => {
               {aiAnalysis && (
                   <div className="mt-4 bg-white/10 rounded-lg p-3 border border-white/20 animate-in fade-in slide-in-from-top-2">
                       <p className="text-xs font-bold text-yellow-300 uppercase tracking-wide">Suggestion</p>
-                      <p className="font-semibold">{aiAnalysis.departmentName}</p>
+                      <p className="font-semibold">{aiAnalysis.departmentName || 'No specific department'}</p>
                       <div className="flex items-center gap-2 mt-2">
                           <span className={`text-xs px-2 py-0.5 rounded font-bold ${
                               aiAnalysis.urgency === 'High' ? 'bg-red-500 text-white' : 
