@@ -51,7 +51,7 @@ interface DataContextType {
   cancelAppointment: (id: string) => void;
 
   bills: Bill[];
-  createBill: (bill: Bill) => void;
+  createBill: (bill: Bill) => Promise<boolean>;
   addPayment: (payment: Payment, billId: string) => void;
 
   vitals: VitalSign[];
@@ -686,19 +686,47 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     else showToast('success', 'Appointment cancelled.');
   };
 
-  const createBill = async (bill: Bill) => {
-      if (!requireDb()) return;
-      setBills(prev => [...prev, bill]);
+  const createBill = async (bill: Bill): Promise<boolean> => {
+      if (!requireDb()) return false;
+      
+      // Optimistic update
+      setBills(prev => [bill, ...prev]);
+
       const { error: billError } = await getSupabase().from('bills').insert({
-          id: bill.id, patient_id: bill.patientId, appointment_id: bill.appointmentId, date: bill.date,
-          status: bill.status, total_amount: bill.totalAmount, paid_amount: bill.paidAmount
+          id: bill.id, 
+          patient_id: bill.patientId, 
+          appointment_id: bill.appointmentId || null, 
+          date: bill.date,
+          status: bill.status, 
+          total_amount: bill.totalAmount, 
+          paid_amount: bill.paidAmount
       });
 
-      if (billError) { showToast('error', 'Failed to create bill: ' + billError.message); setBills(prev => prev.filter(b => b.id !== bill.id)); return; }
+      if (billError) { 
+          showToast('error', 'Failed to create bill: ' + billError.message); 
+          setBills(prev => prev.filter(b => b.id !== bill.id)); 
+          return false; 
+      }
 
-      const itemsDb = bill.items.map(i => ({ id: i.id, bill_id: bill.id, description: i.description, quantity: i.quantity, unit_price: i.unitPrice, total: i.total }));
+      const itemsDb = bill.items.map(i => ({ 
+          id: i.id, 
+          bill_id: bill.id, 
+          description: i.description, 
+          quantity: Number(i.quantity), 
+          unit_price: Number(i.unitPrice), 
+          total: Number(i.total) 
+      }));
+      
       const { error: itemsError } = await getSupabase().from('bill_items').insert(itemsDb);
-      if (itemsError) showToast('error', 'Failed to save bill items.'); else showToast('success', 'Invoice generated.');
+      
+      if (itemsError) { 
+          showToast('error', 'Failed to save bill items: ' + itemsError.message);
+          // Optional: Delete the bill if items failed? For now, keep it as it might be manually fixable or retryable logic could be added.
+          return false;
+      } 
+      
+      showToast('success', 'Invoice generated successfully.');
+      return true;
   };
 
   const addPayment = async (payment: Payment, billId: string) => {

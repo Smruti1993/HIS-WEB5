@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
-import { Plus, Search, Printer, DollarSign, FileText, Trash2, X, History, CreditCard, Package, Pill, Stethoscope, Save, ArrowLeft, MoreHorizontal, CheckSquare, Square } from 'lucide-react';
+import { Plus, Search, Printer, DollarSign, FileText, Trash2, X, History, CreditCard, Package, Pill, Stethoscope, Save, ArrowLeft, MoreHorizontal, CheckSquare, Square, Loader2 } from 'lucide-react';
 import { Bill, BillItem, Payment, ServiceDefinition } from '../types';
 
 export const Billing = () => {
@@ -12,6 +12,7 @@ export const Billing = () => {
 
   // --- Create Bill Modal State ---
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
   // Header / Config State
   const [newBillPatient, setNewBillPatient] = useState('');
@@ -118,13 +119,24 @@ export const Billing = () => {
       setActiveRowIndex(null);
   };
 
-  const handleCreateBill = () => {
+  const handleCreateBill = async () => {
       if (!newBillPatient) {
           showToast('error', 'Please select a patient first.');
           return;
       }
 
-      const totalAmount = billItems.reduce((sum, item) => sum + item.total, 0);
+      setIsSaving(true);
+
+      // Recalculate totals to ensure data consistency
+      const processedItems = billItems.map((item, idx) => ({
+          ...item,
+          id: `${Date.now()}-${idx}`,
+          quantity: Number(item.quantity),
+          unitPrice: Number(item.unitPrice),
+          total: Number(item.quantity) * Number(item.unitPrice)
+      }));
+
+      const totalAmount = processedItems.reduce((sum, item) => sum + item.total, 0);
       
       const newBill: Bill = {
           id: Date.now().toString(),
@@ -133,16 +145,20 @@ export const Billing = () => {
           status: 'Unpaid',
           totalAmount,
           paidAmount: 0,
-          items: billItems.map((item, idx) => ({ ...item, id: `${Date.now()}-${idx}` })),
+          items: processedItems,
           payments: []
       };
 
-      createBill(newBill);
-      setShowCreateModal(false);
-      // Reset
-      setNewBillPatient('');
-      setBillItems([{ description: 'Consultation Fee', quantity: 1, unitPrice: 50, total: 50 }]);
-      setInvoiceRemarks('');
+      const success = await createBill(newBill);
+      setIsSaving(false);
+
+      if (success) {
+          setShowCreateModal(false);
+          // Reset
+          setNewBillPatient('');
+          setBillItems([{ description: 'Consultation Fee', quantity: 1, unitPrice: 50, total: 50 }]);
+          setInvoiceRemarks('');
+      }
   };
 
   // --- Handlers: Payment ---
@@ -677,8 +693,13 @@ export const Billing = () => {
                                   Apply Off Duty : <input type="checkbox" className="rounded" />
                               </label>
                               
-                              <button onClick={handleCreateBill} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-1.5 rounded text-xs font-bold shadow-md transition-colors flex items-center gap-1">
-                                  <Save className="w-3.5 h-3.5" /> Save And Approve
+                              <button 
+                                  onClick={handleCreateBill} 
+                                  disabled={isSaving}
+                                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-5 py-1.5 rounded text-xs font-bold shadow-md transition-colors flex items-center gap-1"
+                              >
+                                  {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} 
+                                  {isSaving ? 'Saving...' : 'Save And Approve'}
                               </button>
                               
                               <button className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded text-xs font-bold shadow-md transition-colors">
