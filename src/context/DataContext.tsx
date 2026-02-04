@@ -565,48 +565,78 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       showToast('success', 'Service saved successfully.');
   };
 
-  const uploadServiceDefinitions = async (services: ServiceDefinition[]) => {
+  const uploadServiceDefinitions = async (incomingServices: ServiceDefinition[]) => {
       if (!requireDb()) return;
       
-      setServiceDefinitions(prev => [...prev, ...services]);
+      // We need to check if services already exist by CODE.
+      // If yes -> Update (preserve ID)
+      // If no -> Insert (use new ID)
       
-      const dbData = services.map(mapServiceDefToDb);
+      const upsertPayload: any[] = [];
+      const tariffsToInsert: any[] = [];
+      const serviceIdsToCleanTariffs: string[] = [];
+      
+      // Create a map of current services for fast lookup
+      const currentServiceMap = new Map(serviceDefinitions.map(s => [s.code, s]));
+      
+      // We will perform local state update at end or via refresh
+      
+      for (const incoming of incomingServices) {
+          const existing = currentServiceMap.get(incoming.code);
+          
+          let finalId = incoming.id;
+          
+          if (existing) {
+              // Code exists: Use existing ID to update, but take other fields from incoming
+              finalId = existing.id;
+          }
+          
+          // Prepare DB Object
+          const mergedService = { ...incoming, id: finalId };
+          upsertPayload.push(mapServiceDefToDb(mergedService));
+          
+          // Identify IDs for tariff cleanup (we will replace tariffs for these services)
+          serviceIdsToCleanTariffs.push(finalId);
+          
+          // Prepare Tariffs
+          if (incoming.tariffs) {
+              incoming.tariffs.forEach(t => {
+                  // Ensure the tariff points to the correct Service ID (existing or new)
+                  // Note: The tariff ID itself was generated in frontend parser, which is fine for new insert.
+                  tariffsToInsert.push(mapTariffToDb({
+                      ...t,
+                      serviceId: finalId
+                  }));
+              });
+          }
+      }
 
-      const { error } = await getSupabase().from('service_definitions').insert(dbData);
+      // 1. Upsert Services
+      const { error: serviceError } = await getSupabase().from('service_definitions').upsert(upsertPayload);
       
-      if (error) {
-          showToast('error', `Bulk upload failed: ${error.message}`);
-          setRefreshTrigger(prev => prev + 1); // Revert local if needed by refetching
+      if (serviceError) {
+          showToast('error', `Bulk upload failed: ${serviceError.message}`);
+          setRefreshTrigger(prev => prev + 1); // Revert local state
           return;
       }
 
-      // Handle Bulk Tariffs
-      const allTariffs: any[] = [];
-      const newLocalTariffs: ServiceTariff[] = [];
-
-      services.forEach(s => {
-          if (s.tariffs && s.tariffs.length > 0) {
-              s.tariffs.forEach(t => {
-                  // Ensure serviceId matches the service being inserted (which we generated on client)
-                  t.serviceId = s.id; 
-                  allTariffs.push(mapTariffToDb(t));
-                  newLocalTariffs.push(t);
-              });
-          }
-      });
-
-      if (allTariffs.length > 0) {
-          const { error: tariffError } = await getSupabase().from('service_tariffs').insert(allTariffs);
+      // 2. Handle Tariffs (Delete old for these services, insert new)
+      if (serviceIdsToCleanTariffs.length > 0) {
+          // Delete existing tariffs for the services we just updated/inserted
+          await getSupabase().from('service_tariffs').delete().in('service_id', serviceIdsToCleanTariffs);
           
-          if (tariffError) {
-              console.error("Tariff upload error", tariffError);
-              showToast('error', `Services uploaded, but tariffs failed: ${tariffError.message}`);
-          } else {
-              setServiceTariffs(prev => [...prev, ...newLocalTariffs]);
+          // Insert the new tariffs from the Excel file
+          if (tariffsToInsert.length > 0) {
+              const { error: tariffError } = await getSupabase().from('service_tariffs').insert(tariffsToInsert);
+              if (tariffError) {
+                  console.error("Tariff upload error", tariffError);
+                  showToast('error', `Services uploaded, but tariff update failed: ${tariffError.message}`);
+              }
           }
       }
 
-      showToast('success', `${services.length} services imported successfully.`);
+      showToast('success', `${incomingServices.length} services processed successfully.`);
+      setRefreshTrigger(prev => prev + 1); // Refresh local state to reflect updates
   };
 
   const saveAvailability = async (avail: DoctorAvailability) => {

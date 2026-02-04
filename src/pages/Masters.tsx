@@ -203,17 +203,19 @@ const DiagnosisUploader = () => {
             const text = e.target?.result as string;
             if (!text) return;
 
-            const rows = text.split('\n');
+            const rows = text.split(/\r?\n/); // Handle both \n and \r\n
             const newDiagnoses = [];
             for (let i = 1; i < rows.length; i++) {
                 const row = rows[i].trim();
                 if (!row) continue;
-                const [code, description] = row.split(',').map(c => c.trim());
+                // Basic CSV split
+                const [code, description] = row.split(',').map(c => c ? c.trim().replace(/^"|"$/g, '') : '');
+                
                 if (code && description) {
                     newDiagnoses.push({
                         id: Date.now().toString() + i,
                         code,
-                        description: description.replace(/^"|"$/g, ''),
+                        description,
                         status: 'Active' as const
                     });
                 }
@@ -404,7 +406,7 @@ const ServiceMaster = () => {
             const text = e.target?.result as string;
             if (!text) return;
 
-            const rows = text.split('\n');
+            const rows = text.split(/\r?\n/); // Handle both newline types
             const newServices: ServiceDefinition[] = [];
             
             // Skip header row
@@ -412,8 +414,8 @@ const ServiceMaster = () => {
                 const row = rows[i].trim();
                 if (!row) continue;
                 
-                // Naive CSV split, assuming no commas in fields for now
-                const cols = row.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+                // Better CSV split handling basic quotes
+                const cols = row.split(',').map(c => c ? c.trim().replace(/^"|"$/g, '') : '');
                 
                 if (cols.length >= 2) { // Minimum Code & Name
                     const [code, name, type, cat, dur, chg, stat, grp, priceStr] = cols;
@@ -429,7 +431,7 @@ const ServiceMaster = () => {
                         serviceCategory: cat || '',
                         estDuration: parseInt(dur) || 0,
                         chargeable: chg?.toLowerCase() === 'true',
-                        status: (stat === 'Inactive' ? 'Inactive' : 'Active') as any,
+                        status: (stat && stat.toLowerCase() === 'inactive' ? 'Inactive' : 'Active') as any,
                         groupName: grp || '',
                         tariffs: []
                     };
