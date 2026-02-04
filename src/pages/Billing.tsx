@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
-import { Plus, Search, Printer, DollarSign, FileText, Trash2, X, History, CreditCard, Package, Pill, Stethoscope, Save, ArrowLeft, MoreHorizontal, CheckSquare, Square, Loader2 } from 'lucide-react';
+import { Plus, Search, Printer, DollarSign, FileText, Trash2, X, History, CreditCard, Package, Pill, Stethoscope, Save, ArrowLeft, MoreHorizontal, CheckSquare, Square, Loader2, Ban, AlertTriangle } from 'lucide-react';
 import { Bill, BillItem, Payment, ServiceDefinition } from '../types';
 
 export const Billing = () => {
-  const { bills, createBill, addPayment, patients, appointments, showToast, serviceDefinitions, serviceTariffs } = useData();
+  const { bills, createBill, cancelBill, addPayment, patients, appointments, showToast, serviceDefinitions, serviceTariffs } = useData();
   
   // --- List View State ---
   const [searchTerm, setSearchTerm] = useState('');
@@ -40,6 +40,9 @@ export const Billing = () => {
   const [amountError, setAmountError] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [paymentRef, setPaymentRef] = useState('');
+
+  // --- Cancel Modal State ---
+  const [billToCancel, setBillToCancel] = useState<string | null>(null);
 
   // --- Derived Data ---
   const filteredBills = bills.filter(b => {
@@ -264,6 +267,7 @@ export const Billing = () => {
             .status-paid { background: #dcfce7; color: #166534; }
             .status-partial { background: #ffedd5; color: #9a3412; }
             .status-unpaid { background: #fee2e2; color: #991b1b; }
+            .status-cancelled { background: #f1f5f9; color: #64748b; text-decoration: line-through; }
             .payment-history { margin-top: 60px; border-top: 1px solid #e2e8f0; padding-top: 20px; }
             .payment-history h4 { font-size: 14px; font-weight: 700; margin-bottom: 15px; color: #0f172a; }
             .payment-row { display: flex; justify-content: space-between; font-size: 13px; color: #64748b; padding: 8px 0; border-bottom: 1px dashed #f1f5f9; }
@@ -336,6 +340,7 @@ export const Billing = () => {
                 <option value="Unpaid">Unpaid</option>
                 <option value="Partial">Partial</option>
                 <option value="Paid">Paid</option>
+                <option value="Cancelled">Cancelled</option>
             </select>
         </div>
 
@@ -375,6 +380,7 @@ export const Billing = () => {
                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                             bill.status === 'Paid' ? 'bg-green-100 text-green-800' :
                                             bill.status === 'Partial' ? 'bg-orange-100 text-orange-800' :
+                                            bill.status === 'Cancelled' ? 'bg-slate-100 text-slate-500 line-through' :
                                             'bg-red-100 text-red-800'
                                         }`}>
                                             {bill.status}
@@ -382,14 +388,23 @@ export const Billing = () => {
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-2">
-                                            {bill.status !== 'Paid' && (
-                                                <button 
-                                                    onClick={() => openPaymentModal(bill)}
-                                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                    title="Record Payment"
-                                                >
-                                                    <DollarSign className="w-4 h-4" />
-                                                </button>
+                                            {bill.status !== 'Paid' && bill.status !== 'Cancelled' && (
+                                                <>
+                                                    <button 
+                                                        onClick={() => openPaymentModal(bill)}
+                                                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                        title="Record Payment"
+                                                    >
+                                                        <DollarSign className="w-4 h-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setBillToCancel(bill.id)}
+                                                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                        title="Cancel Invoice"
+                                                    >
+                                                        <Ban className="w-4 h-4" />
+                                                    </button>
+                                                </>
                                             )}
                                             <button 
                                                 onClick={() => handlePrint(bill)}
@@ -408,6 +423,42 @@ export const Billing = () => {
             </table>
         </div>
       </div>
+
+      {/* CANCEL CONFIRMATION MODAL */}
+      {billToCancel && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 border border-slate-100">
+                  <div className="flex items-center gap-3 mb-4 text-red-600">
+                      <div className="bg-red-100 p-2 rounded-full">
+                          <AlertTriangle className="w-6 h-6" />
+                      </div>
+                      <h3 className="font-bold text-lg text-slate-800">Cancel Invoice?</h3>
+                  </div>
+                  <p className="text-slate-600 text-sm mb-6 leading-relaxed">
+                      Are you sure you want to cancel this invoice? This action updates the status to 'Cancelled' and cannot be undone via this interface.
+                  </p>
+                  <div className="flex justify-end gap-3">
+                      <button 
+                          onClick={() => setBillToCancel(null)}
+                          className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors border border-slate-200"
+                      >
+                          Keep Invoice
+                      </button>
+                      <button 
+                          onClick={() => {
+                              if (billToCancel) {
+                                  cancelBill(billToCancel);
+                                  setBillToCancel(null);
+                              }
+                          }}
+                          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium shadow-md shadow-red-100 transition-colors"
+                      >
+                          Yes, Cancel
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {/* NEW COMPLEX CREATE INVOICE MODAL */}
       {showCreateModal && (

@@ -155,7 +155,7 @@ export interface Bill {
   patientId: string;
   appointmentId?: string; // Optional link to an appointment
   date: string;
-  status: 'Unpaid' | 'Partial' | 'Paid';
+  status: 'Unpaid' | 'Partial' | 'Paid' | 'Cancelled';
   totalAmount: number;
   paidAmount: number;
   items: BillItem[];

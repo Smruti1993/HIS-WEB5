@@ -52,6 +52,7 @@ interface DataContextType {
 
   bills: Bill[];
   createBill: (bill: Bill) => Promise<boolean>;
+  cancelBill: (id: string) => Promise<boolean>;
   addPayment: (payment: Payment, billId: string) => void;
 
   vitals: VitalSign[];
@@ -729,6 +730,28 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return true;
   };
 
+  const cancelBill = async (id: string): Promise<boolean> => {
+      if (!requireDb()) return false;
+      
+      const original = bills.find(b => b.id === id);
+      if (!original) return false;
+
+      // Optimistic update
+      setBills(prev => prev.map(b => b.id === id ? { ...b, status: 'Cancelled' } : b));
+
+      const { error } = await getSupabase().from('bills').update({ status: 'Cancelled' }).eq('id', id);
+      
+      if (error) {
+          showToast('error', 'Failed to cancel bill: ' + error.message);
+          // Revert
+          setBills(prev => prev.map(b => b.id === id ? original : b));
+          return false;
+      }
+      
+      showToast('success', 'Invoice cancelled.');
+      return true;
+  };
+
   const addPayment = async (payment: Payment, billId: string) => {
       if (!requireDb()) return;
       setBills(prev => prev.map(b => {
@@ -836,7 +859,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       serviceDefinitions, serviceTariffs, saveServiceDefinition, uploadServiceDefinitions,
       availabilities, saveAvailability, deleteAvailability,
       appointments, bookAppointment, updateAppointment, cancelAppointment,
-      bills, createBill, addPayment,
+      bills, createBill, cancelBill, addPayment,
       vitals, diagnoses, narrativeDiagnoses, clinicalNotes, allergies, 
       saveVitalSign, saveDiagnosis, deleteDiagnosis, saveNarrativeDiagnosis, saveClinicalNote, saveAllergy,
       toasts, showToast, removeToast,
