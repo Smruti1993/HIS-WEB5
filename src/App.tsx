@@ -12,6 +12,7 @@ import { Connection } from './pages/Connection';
 import { Billing } from './pages/Billing';
 import { DoctorWorkbench } from './pages/DoctorWorkbench';
 import { Consultation } from './pages/Consultation';
+import { Reports } from './pages/Reports';
 import { Login } from './pages/Login';
 
 const PrivateRoute = ({ children }: { children: React.ReactElement }) => {
@@ -43,6 +44,7 @@ const AppRoutes = () => {
             <Route path="billing" element={<Billing />} />
             <Route path="doctor-workbench" element={<DoctorWorkbench />} />
             <Route path="consultation/:appointmentId" element={<Consultation />} />
+            <Route path="reports" element={<Reports />} />
             <Route path="employees" element={<Employees />} />
             <Route path="availability" element={<Availability />} />
             <Route path="masters" element={<Masters />} />

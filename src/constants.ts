@@ -1,4 +1,4 @@
-import { Home, Users, Calendar, Settings, Clock, Activity, Database, CreditCard, Stethoscope } from 'lucide-react';
+import { Home, Users, Calendar, Settings, Clock, Activity, Database, CreditCard, Stethoscope, FileBarChart } from 'lucide-react';
 
 export const APP_NAME = "MediCore HMS";
 
@@ -22,6 +22,7 @@ export const NAV_ITEMS: NavItem[] = [
   // Patient Care Section
   { label: 'Doctor Workbench', path: '/doctor-workbench', icon: Stethoscope, category: 'Patient Care' },
 
+  { label: 'Reports', path: '/reports', icon: FileBarChart, category: 'Administration' },
   { label: 'Doctors & Staff', path: '/employees', icon: Activity, category: 'Administration' },
   { label: 'Availability', path: '/availability', icon: Clock, category: 'Administration' },
   { label: 'Masters', path: '/masters', icon: Settings, category: 'Administration' },
