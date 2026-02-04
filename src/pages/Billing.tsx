@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import { Plus, Search, Printer, DollarSign, FileText, Trash2, X, History, CreditCard, Package, Pill, Stethoscope, Save, ArrowLeft, MoreHorizontal, CheckSquare, Square } from 'lucide-react';
-import { Bill, BillItem, Payment } from '../types';
+import { Bill, BillItem, Payment, ServiceDefinition } from '../types';
 
 export const Billing = () => {
-  const { bills, createBill, addPayment, patients, appointments, showToast } = useData();
+  const { bills, createBill, addPayment, patients, appointments, showToast, serviceDefinitions, serviceTariffs } = useData();
   
   // --- List View State ---
   const [searchTerm, setSearchTerm] = useState('');
@@ -26,6 +26,7 @@ export const Billing = () => {
       { description: 'Consultation Fee', quantity: 1, unitPrice: 50, total: 50 }
   ]);
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
+  const [activeRowIndex, setActiveRowIndex] = useState<number | null>(null);
 
   // Summary State (Mocked mostly as we build the UI)
   const [deposits, setDeposits] = useState(0);
@@ -93,6 +94,28 @@ export const Billing = () => {
       } else {
           setSelectedItems(billItems.map((_, i) => i));
       }
+  };
+
+  // --- Service Search Logic ---
+  const getServicePrice = (serviceId: string) => {
+      const tariff = serviceTariffs.find(t => t.serviceId === serviceId && t.status === 'Active');
+      return tariff ? tariff.price : 0;
+  };
+
+  const selectService = (index: number, service: ServiceDefinition) => {
+      const price = getServicePrice(service.id);
+      setBillItems(prev => {
+          const newItems = [...prev];
+          const qty = newItems[index].quantity || 1;
+          newItems[index] = { 
+              ...newItems[index], 
+              description: service.name, 
+              unitPrice: price, 
+              total: price * qty 
+          };
+          return newItems;
+      });
+      setActiveRowIndex(null);
   };
 
   const handleCreateBill = () => {
@@ -421,7 +444,7 @@ export const Billing = () => {
 
                   {/* 2. Toolbar Actions */}
                   <div className="bg-gradient-to-b from-slate-50 to-slate-100 p-2 border-b border-slate-300 flex flex-wrap gap-2 shrink-0 shadow-inner">
-                      <button onClick={() => addItem('New Service', 0)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm transition-all border border-blue-700">
+                      <button onClick={() => addItem('', 0)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm transition-all border border-blue-700">
                           <Stethoscope className="w-3.5 h-3.5" /> Add Services
                       </button>
                       <button onClick={() => addItem('Package Deal', 100)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded shadow-sm transition-all border border-blue-700">
@@ -503,20 +526,50 @@ export const Billing = () => {
                                   {billItems.length === 0 ? (
                                       <tr><td colSpan={6} className="p-12 text-center text-slate-400 italic">No items added. Use the toolbar to add services.</td></tr>
                                   ) : (
-                                      billItems.map((item, idx) => (
+                                      billItems.map((item, idx) => {
+                                          // Calculate search suggestions for this specific row
+                                          const showSuggestions = activeRowIndex === idx && item.description.length > 0;
+                                          const suggestions = showSuggestions ? serviceDefinitions.filter(s => 
+                                              s.name.toLowerCase().includes(item.description.toLowerCase()) || 
+                                              s.code.toLowerCase().includes(item.description.toLowerCase())
+                                          ).slice(0, 10) : [];
+
+                                          return (
                                           <tr key={idx} className={`hover:bg-blue-50 transition-colors group ${selectedItems.includes(idx) ? 'bg-blue-50' : ''}`}>
                                               <td className="p-3 border-r border-slate-200 text-center">
                                                   <button onClick={() => toggleItemSelection(idx)} className="text-slate-400 hover:text-blue-600">
                                                       {selectedItems.includes(idx) ? <CheckSquare className="w-4 h-4 mx-auto text-blue-600" /> : <Square className="w-4 h-4 mx-auto" />}
                                                   </button>
                                               </td>
-                                              <td className="p-2 border-r border-slate-200">
+                                              <td className="p-2 border-r border-slate-200 relative">
                                                   <input 
                                                       className="w-full bg-transparent outline-none border border-transparent focus:border-blue-300 rounded px-2 py-1 font-medium text-slate-700"
-                                                      placeholder="Item description"
+                                                      placeholder="Item description or search service..."
                                                       value={item.description}
-                                                      onChange={e => updateItem(idx, 'description', e.target.value)}
+                                                      onFocus={() => setActiveRowIndex(idx)}
+                                                      onBlur={() => setTimeout(() => setActiveRowIndex(null), 200)}
+                                                      onChange={e => {
+                                                          updateItem(idx, 'description', e.target.value);
+                                                          setActiveRowIndex(idx);
+                                                      }}
                                                   />
+                                                  {suggestions.length > 0 && (
+                                                      <div className="absolute top-full left-0 w-full bg-white border border-slate-200 shadow-xl rounded-b-md z-50 max-h-60 overflow-y-auto">
+                                                          {suggestions.map(s => (
+                                                              <div 
+                                                                  key={s.id} 
+                                                                  onClick={() => selectService(idx, s)} 
+                                                                  className="px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-0 group/item"
+                                                              >
+                                                                  <div className="font-medium text-slate-800 group-hover/item:text-blue-700">{s.name}</div>
+                                                                  <div className="flex justify-between text-xs text-slate-500 mt-0.5">
+                                                                      <span className="font-mono bg-slate-100 px-1 rounded">{s.code}</span>
+                                                                      <span className="font-bold text-green-600">${getServicePrice(s.id).toFixed(2)}</span>
+                                                                  </div>
+                                                              </div>
+                                                          ))}
+                                                      </div>
+                                                  )}
                                               </td>
                                               <td className="p-2 border-r border-slate-200">
                                                   <input 
@@ -543,7 +596,7 @@ export const Billing = () => {
                                                   </button>
                                               </td>
                                           </tr>
-                                      ))
+                                      )})
                                   )}
                               </tbody>
                           </table>
