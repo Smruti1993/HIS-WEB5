@@ -383,8 +383,8 @@ const ServiceMaster = () => {
     };
 
     const handleDownloadTemplate = () => {
-        const headers = "Code,Name,ServiceType,ServiceCategory,EstDuration,Chargeable,Status,GroupName";
-        const sample = "CON001,General Consultation,Consultation,General,15,true,Active,Consultations";
+        const headers = "Code,Name,ServiceType,ServiceCategory,EstDuration,Chargeable,Status,GroupName,Price";
+        const sample = "CON001,General Consultation,Consultation,General,15,true,Active,Consultations,50.00";
         const csvContent = "data:text/csv;charset=utf-8," + headers + "\n" + sample;
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
@@ -416,11 +416,13 @@ const ServiceMaster = () => {
                 const cols = row.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
                 
                 if (cols.length >= 2) { // Minimum Code & Name
-                    const [code, name, type, cat, dur, chg, stat, grp] = cols;
+                    const [code, name, type, cat, dur, chg, stat, grp, priceStr] = cols;
+                    const newId = Date.now().toString() + i;
+                    const price = priceStr ? parseFloat(priceStr) : NaN;
                     
-                    newServices.push({
+                    const newService: ServiceDefinition = {
                         ...initialFormState,
-                        id: Date.now().toString() + i,
+                        id: newId,
                         code: code,
                         name: name,
                         serviceType: type || 'Single service',
@@ -428,8 +430,22 @@ const ServiceMaster = () => {
                         estDuration: parseInt(dur) || 0,
                         chargeable: chg?.toLowerCase() === 'true',
                         status: (stat === 'Inactive' ? 'Inactive' : 'Active') as any,
-                        groupName: grp || ''
-                    });
+                        groupName: grp || '',
+                        tariffs: []
+                    };
+
+                    if (!isNaN(price)) {
+                        newService.tariffs = [{
+                            id: Date.now().toString() + 't' + i,
+                            serviceId: newId,
+                            tariffName: 'Standard',
+                            price: price,
+                            effectiveDate: new Date().toISOString(),
+                            status: 'Active'
+                        }];
+                    }
+                    
+                    newServices.push(newService);
                 }
             }
 

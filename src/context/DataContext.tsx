@@ -577,9 +577,36 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (error) {
           showToast('error', `Bulk upload failed: ${error.message}`);
           setRefreshTrigger(prev => prev + 1); // Revert local if needed by refetching
-      } else {
-          showToast('success', `${services.length} services imported successfully.`);
+          return;
       }
+
+      // Handle Bulk Tariffs
+      const allTariffs: any[] = [];
+      const newLocalTariffs: ServiceTariff[] = [];
+
+      services.forEach(s => {
+          if (s.tariffs && s.tariffs.length > 0) {
+              s.tariffs.forEach(t => {
+                  // Ensure serviceId matches the service being inserted (which we generated on client)
+                  t.serviceId = s.id; 
+                  allTariffs.push(mapTariffToDb(t));
+                  newLocalTariffs.push(t);
+              });
+          }
+      });
+
+      if (allTariffs.length > 0) {
+          const { error: tariffError } = await getSupabase().from('service_tariffs').insert(allTariffs);
+          
+          if (tariffError) {
+              console.error("Tariff upload error", tariffError);
+              showToast('error', `Services uploaded, but tariffs failed: ${tariffError.message}`);
+          } else {
+              setServiceTariffs(prev => [...prev, ...newLocalTariffs]);
+          }
+      }
+
+      showToast('success', `${services.length} services imported successfully.`);
   };
 
   const saveAvailability = async (avail: DoctorAvailability) => {
