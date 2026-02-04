@@ -6,7 +6,7 @@ import { Sparkles, Loader2, Calendar, Clock, AlertCircle, Filter, RefreshCw, XCi
 export const Appointments = () => {
   const { 
     departments, employees, availabilities, appointments, 
-    bookAppointment, cancelAppointment, patients 
+    bookAppointment, cancelAppointment, patients, allergies 
   } = useData();
 
   // --- Booking State ---
@@ -32,11 +32,30 @@ export const Appointments = () => {
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [appointmentToCancel, setAppointmentToCancel] = useState<string | null>(null);
 
+  // --- Derived Data ---
+  const currentPatient = patients.find(p => p.id === selectedPatient);
+
   // --- Handlers ---
   const handleAiTriage = async () => {
     if (!symptoms) return;
     setIsAnalyzing(true);
-    const result = await analyzeSymptoms(symptoms, departments.map(d => d.name));
+    
+    let patientContext: { age?: number; gender?: string; allergies?: string[] } = {};
+    
+    if (currentPatient) {
+        const age = new Date().getFullYear() - new Date(currentPatient.dob).getFullYear();
+        const activeAllergies = allergies
+            .filter(a => a.patientId === currentPatient.id && a.status === 'Active')
+            .map(a => a.allergen);
+            
+        patientContext = {
+            age,
+            gender: currentPatient.gender,
+            allergies: activeAllergies
+        };
+    }
+
+    const result = await analyzeSymptoms(symptoms, departments.map(d => d.name), patientContext);
     setIsAnalyzing(false);
     
     if (result) {
@@ -157,11 +176,22 @@ export const Appointments = () => {
           
           {/* AI Symptom Checker */}
           <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-6 text-white shadow-lg">
-              <div className="flex items-center mb-4">
-                  <Sparkles className="w-5 h-5 mr-2 text-yellow-300" />
-                  <h3 className="font-bold text-lg">AI Smart Triage</h3>
+              <div className="flex items-center mb-4 justify-between">
+                  <div className="flex items-center">
+                      <Sparkles className="w-5 h-5 mr-2 text-yellow-300" />
+                      <h3 className="font-bold text-lg">AI Smart Triage</h3>
+                  </div>
+                  {currentPatient && (
+                      <span className="text-[10px] bg-white/20 border border-white/30 px-2 py-1 rounded text-indigo-100 font-medium">
+                          Context: {currentPatient.firstName}
+                      </span>
+                  )}
               </div>
-              <p className="text-indigo-100 text-sm mb-4">Describe symptoms to get department recommendations.</p>
+              <p className="text-indigo-100 text-sm mb-4">
+                  {currentPatient 
+                    ? `Analyze symptoms for ${currentPatient.firstName} (considering age & allergies).` 
+                    : "Select a patient below for personalized triage, or describe symptoms generally."}
+              </p>
               
               <textarea 
                   className="w-full bg-white/10 border border-white/20 rounded-lg p-3 text-white placeholder-indigo-200 text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
@@ -174,7 +204,7 @@ export const Appointments = () => {
               <button 
                   onClick={handleAiTriage}
                   disabled={isAnalyzing}
-                  className="mt-3 w-full bg-white text-indigo-700 font-bold py-2 rounded-lg text-sm hover:bg-indigo-50 transition-colors flex justify-center items-center"
+                  className="mt-3 w-full bg-white text-indigo-700 font-bold py-2 rounded-lg text-sm hover:bg-indigo-50 transition-colors flex justify-center items-center shadow-md"
               >
                   {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : 'Analyze Symptoms'}
               </button>
@@ -184,11 +214,12 @@ export const Appointments = () => {
                       <p className="text-xs font-bold text-yellow-300 uppercase tracking-wide">Suggestion</p>
                       <p className="font-semibold">{aiAnalysis.departmentName}</p>
                       <div className="flex items-center gap-2 mt-2">
-                          <span className={`text-xs px-2 py-0.5 rounded ${
-                              aiAnalysis.urgency === 'High' ? 'bg-red-500/80' : 'bg-green-500/80'
+                          <span className={`text-xs px-2 py-0.5 rounded font-bold ${
+                              aiAnalysis.urgency === 'High' ? 'bg-red-500 text-white' : 
+                              aiAnalysis.urgency === 'Medium' ? 'bg-orange-500 text-white' : 'bg-green-500 text-white'
                           }`}>Urgency: {aiAnalysis.urgency}</span>
                       </div>
-                      <p className="text-xs mt-2 opacity-80 italic">"{aiAnalysis.reasoning}"</p>
+                      <p className="text-xs mt-2 opacity-90 italic leading-relaxed">"{aiAnalysis.reasoning}"</p>
                   </div>
               )}
           </div>
