@@ -17,7 +17,7 @@ export const analyzeSymptoms = async (
   patientContext?: { age?: number; gender?: string; allergies?: string[] }
 ) => {
   const ai = getAiClient();
-  if (!ai) return { departmentName: null, urgency: 'Unknown', reasoning: 'API Key missing or invalid.' };
+  if (!ai) return { departmentName: null, urgency: 'Unknown', reasoning: 'API Key missing or invalid. Please check your .env file.' };
 
   const deptList = departments.join(', ');
   
@@ -59,10 +59,16 @@ export const analyzeSymptoms = async (
     });
 
     const text = response.text;
-    if (!text) return null;
+    if (!text) throw new Error("Empty response from AI");
+    
     return JSON.parse(text);
-  } catch (error) {
+  } catch (error: any) {
     console.error("AI Triage Error:", error);
-    return null;
+    // Return the specific error message to help the user debug (e.g., API key issues)
+    return { 
+        departmentName: null, 
+        urgency: 'Error', 
+        reasoning: error.message || "An unexpected error occurred during analysis." 
+    };
   }
 };

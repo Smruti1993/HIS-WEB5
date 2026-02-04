@@ -64,27 +64,29 @@ export const Appointments = () => {
         const result = await analyzeSymptoms(symptoms, departments.map(d => d.name), patientContext);
         
         if (result) {
-            // Check for API Key specific error returned by service
-            if (result.departmentName === null && result.reasoning?.includes('API Key')) {
-                showToast('error', result.reasoning);
-            } else {
+            // Check if analysis returned a valid department (success case)
+            if (result.departmentName) {
                 setAiAnalysis(result);
-                if (result.departmentName) {
-                    const dept = departments.find(d => d.name === result.departmentName);
-                    if (dept) {
-                        setSelectedDept(dept.id);
-                        showToast('success', `Suggesting ${dept.name}`);
-                    } else {
-                        showToast('info', `Suggested department '${result.departmentName}' not found in system.`);
-                    }
+                const dept = departments.find(d => d.name === result.departmentName);
+                if (dept) {
+                    setSelectedDept(dept.id);
+                    showToast('success', `Suggesting ${dept.name}`);
+                } else {
+                    showToast('info', `Suggested department '${result.departmentName}' not found in system.`);
                 }
+            } else {
+                // Handle Error / Failure case from Service
+                // The service returns departmentName: null and reasoning: error_message in catch blocks
+                showToast('error', result.reasoning || 'AI analysis could not determine a department.');
+                // Optionally log to console for debugging
+                console.warn('AI Triage Failure:', result.reasoning);
             }
         } else {
-            showToast('error', 'AI Analysis failed to return a result. Please try again.');
+            showToast('error', 'AI Service is currently unavailable.');
         }
     } catch (error) {
         console.error(error);
-        showToast('error', 'An error occurred during symptom analysis.');
+        showToast('error', 'An unexpected error occurred.');
     } finally {
         setIsAnalyzing(false);
     }
