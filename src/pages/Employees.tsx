@@ -4,7 +4,7 @@ import { Employee, EmployeeRole } from '../types';
 import { UserPlus, Filter, Pencil, X, AlertTriangle, Power } from 'lucide-react';
 
 export const Employees = () => {
-  const { employees, addEmployee, updateEmployee, departments } = useData();
+  const { employees, addEmployee, updateEmployee, departments, showToast } = useData();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filterRole, setFilterRole] = useState<string>('All');
@@ -61,6 +61,21 @@ export const Employees = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!formData.email || !emailRegex.test(formData.email)) {
+        showToast('error', 'Invalid email address format.');
+        return;
+    }
+
+    // Phone validation: allow digits, spaces, dashes, plus sign. Min length 10.
+    const phoneRegex = /^[\d\+\-\s]{10,}$/;
+    if (!formData.phone || !phoneRegex.test(formData.phone)) {
+        showToast('error', 'Invalid phone number format. Use at least 10 digits.');
+        return;
+    }
+
     if (editingId) {
       if (!isConfirming) {
         setIsConfirming(true);

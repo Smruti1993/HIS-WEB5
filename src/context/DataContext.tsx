@@ -1,8 +1,9 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { 
   Patient, Employee, Department, Unit, ServiceCentre, 
   DoctorAvailability, Appointment, ToastMessage, Bill, BillItem, Payment,
-  VitalSign, Diagnosis, ClinicalNote, Allergy, NarrativeDiagnosis, MasterDiagnosis, ServiceDefinition, AppUser, ServiceTariff
+  VitalSign, Diagnosis, ClinicalNote, Allergy, NarrativeDiagnosis, MasterDiagnosis, ServiceDefinition, AppUser, ServiceTariff, ServiceOrder
 } from '../types';
 import { 
     getSupabase, 
@@ -60,12 +61,15 @@ interface DataContextType {
   narrativeDiagnoses: NarrativeDiagnosis[];
   clinicalNotes: ClinicalNote[];
   allergies: Allergy[];
+  serviceOrders: ServiceOrder[]; // NEW
+  
   saveVitalSign: (vital: VitalSign) => void;
   saveDiagnosis: (diagnosis: Diagnosis) => void;
   deleteDiagnosis: (id: string) => void;
   saveNarrativeDiagnosis: (nd: NarrativeDiagnosis) => void;
   saveClinicalNote: (note: ClinicalNote) => void;
   saveAllergy: (allergy: Allergy) => void;
+  saveServiceOrders: (orders: ServiceOrder[]) => void; // NEW
   
   toasts: ToastMessage[];
   showToast: (type: 'success' | 'error' | 'info', message: string) => void;
@@ -102,6 +106,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [narrativeDiagnoses, setNarrativeDiagnoses] = useState<NarrativeDiagnosis[]>([]);
   const [clinicalNotes, setClinicalNotes] = useState<ClinicalNote[]>([]);
   const [allergies, setAllergies] = useState<Allergy[]>([]);
+  const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>([]);
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -246,6 +251,19 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       id: t.id, service_id: t.serviceId, tariff_name: t.tariffName, price: t.price, effective_date: t.effectiveDate, status: t.status
   });
 
+  const mapOrderFromDb = (o: any): ServiceOrder => ({
+      id: o.id, appointmentId: o.appointment_id, serviceId: o.service_id, serviceName: o.service_name,
+      cptCode: o.cpt_code, quantity: o.quantity, unitPrice: o.unit_price, discountAmount: o.discount_amount,
+      totalPrice: o.total_price, orderDate: o.order_date, status: o.status, billingStatus: o.billing_status,
+      priority: o.priority, orderingDoctorId: o.ordering_doctor_id, instructions: o.instructions, serviceCenter: o.service_center
+  });
+  const mapOrderToDb = (o: any) => ({
+      id: o.id, appointment_id: o.appointmentId, service_id: o.serviceId, service_name: o.serviceName,
+      cpt_code: o.cptCode, quantity: o.quantity, unit_price: o.unitPrice, discount_amount: o.discountAmount,
+      total_price: o.totalPrice, order_date: o.orderDate, status: o.status, billing_status: o.billingStatus,
+      priority: o.priority, ordering_doctor_id: o.orderingDoctorId, instructions: o.instructions, service_center: o.serviceCenter
+  });
+
 
   // --- Initial Fetch ---
 
@@ -273,7 +291,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       try {
-        const [pRes, eRes, dRes, uRes, sRes, avRes, apRes, bRes, biRes, payRes, vRes, diRes, notRes, alRes, narRes, mdRes, sdRes, stRes] = await Promise.all([
+        const [pRes, eRes, dRes, uRes, sRes, avRes, apRes, bRes, biRes, payRes, vRes, diRes, notRes, alRes, narRes, mdRes, sdRes, stRes, ordRes] = await Promise.all([
           supabase.from('patients').select('*'),
           supabase.from('employees').select('*'),
           supabase.from('departments').select('*'),
@@ -292,6 +310,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           supabase.from('master_diagnoses').select('*'),
           supabase.from('service_definitions').select('*'),
           supabase.from('service_tariffs').select('*'),
+          supabase.from('service_orders').select('*'),
         ]);
 
         if (pRes.error) throw pRes.error;
@@ -311,6 +330,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (mdRes.data) setMasterDiagnoses(mdRes.data.map(mapMasterDiagFromDb));
         if (sdRes.data) setServiceDefinitions(sdRes.data.map(mapServiceDefFromDb));
         if (stRes.data) setServiceTariffs(stRes.data.map(mapTariffFromDb));
+        if (ordRes.data) setServiceOrders(ordRes.data.map(mapOrderFromDb));
 
         if (bRes.data) {
             const rawBills = bRes.data;
@@ -847,6 +867,21 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       else showToast('success', 'Allergy recorded.');
   };
 
+  const saveServiceOrders = async (orders: ServiceOrder[]) => {
+      if (!requireDb()) return;
+      
+      setServiceOrders(prev => [...prev, ...orders]);
+      const dbPayload = orders.map(o => mapOrderToDb(o));
+      
+      const { error } = await getSupabase().from('service_orders').insert(dbPayload);
+      if (error) {
+          showToast('error', `Failed to save orders: ${error.message}`);
+          setServiceOrders(prev => prev.filter(p => !orders.find(o => o.id === p.id))); // revert
+      } else {
+          showToast('success', `${orders.length} service(s) ordered.`);
+      }
+  };
+
   return (
     <DataContext.Provider value={{
       user, login, logout,
@@ -862,6 +897,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       bills, createBill, cancelBill, addPayment,
       vitals, diagnoses, narrativeDiagnoses, clinicalNotes, allergies, 
       saveVitalSign, saveDiagnosis, deleteDiagnosis, saveNarrativeDiagnosis, saveClinicalNote, saveAllergy,
+      serviceOrders, saveServiceOrders,
       toasts, showToast, removeToast,
       isLoading, isDbConnected, updateDbConnection, disconnectDb
     }}>

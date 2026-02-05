@@ -1,12 +1,13 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { 
   User, Info, Save, Printer, FileText, Bell, Activity, Stethoscope, Briefcase, 
   Pill, Clock, FileInput, ChevronRight, ChevronDown, 
-  Bold, Italic, Underline, List, AlignLeft, Type, Download, XCircle, Cloud, CheckCircle, Loader2, Calculator, Plus, Trash2, Search, RotateCcw, History, AlertTriangle, ArrowLeft, Calendar, Wind, Scale
+  Bold, Italic, Underline, List, AlignLeft, Type, Download, XCircle, Cloud, CheckCircle, Loader2, Calculator, Plus, Trash2, Search, RotateCcw, History, AlertTriangle, ArrowLeft, Calendar, Wind, Scale, Edit, X, RefreshCw
 } from 'lucide-react';
-import { VitalSign, Allergy, Diagnosis } from '../types';
+import { VitalSign, Allergy, Diagnosis, ServiceDefinition, ServiceOrder } from '../types';
 
 // --- Static Configs ---
 const SIDEBAR_ITEMS = [
@@ -50,9 +51,464 @@ const FALLBACK_ICD_CODES = [
     { code: 'I10', description: 'Essential (primary) hypertension' },
 ];
 
-// --- Components ---
+// --- CPOE Components (New) ---
+
+const ServiceOrderingModal = ({ 
+    appointmentId, 
+    doctorId, 
+    onClose 
+}: { 
+    appointmentId: string, 
+    doctorId: string, 
+    onClose: () => void 
+}) => {
+    const { serviceDefinitions, serviceTariffs, departments, serviceOrders, saveServiceOrders, showToast } = useData();
+    
+    // Filters
+    const [filterServiceType, setFilterServiceType] = useState('All');
+    const [filterDept, setFilterDept] = useState('All');
+    const [searchName, setSearchName] = useState('');
+    const [showOnlyCash, setShowOnlyCash] = useState(false);
+
+    // Selection
+    const [selectedServices, setSelectedServices] = useState<ServiceOrder[]>([]);
+
+    const filteredServices = serviceDefinitions.filter(s => {
+        const typeMatch = filterServiceType === 'All' || s.serviceType === filterServiceType;
+        const nameMatch = s.name.toLowerCase().includes(searchName.toLowerCase()) || s.code.toLowerCase().includes(searchName.toLowerCase());
+        // Simple dept matching logic (assuming groupName might map to dept for demo, or all if All)
+        const deptMatch = true; 
+        return typeMatch && nameMatch && deptMatch && s.status === 'Active';
+    });
+
+    const getPrice = (serviceId: string) => {
+        const t = serviceTariffs.find(t => t.serviceId === serviceId && t.status === 'Active');
+        return t ? t.price : 0;
+    };
+
+    const toggleService = (s: ServiceDefinition) => {
+        const exists = selectedServices.find(order => order.serviceId === s.id);
+        
+        if (exists) {
+            setSelectedServices(prev => prev.filter(o => o.serviceId !== s.id));
+        } else {
+            const price = getPrice(s.id);
+            const newOrder: ServiceOrder = {
+                id: Date.now().toString() + Math.random().toString().slice(2,5),
+                appointmentId,
+                serviceId: s.id,
+                serviceName: s.name,
+                cptCode: s.cptCode,
+                quantity: 1,
+                unitPrice: price,
+                discountAmount: 0,
+                totalPrice: price, // initial
+                orderDate: new Date().toISOString(),
+                status: 'Ordered',
+                billingStatus: 'Pending',
+                priority: 'Routine',
+                orderingDoctorId: doctorId,
+                instructions: '',
+                serviceCenter: 'General'
+            };
+            setSelectedServices(prev => [...prev, newOrder]);
+        }
+    };
+
+    const updateOrder = (id: string, field: keyof ServiceOrder, val: any) => {
+        setSelectedServices(prev => prev.map(o => {
+            if (o.id !== id) return o;
+            
+            const updated = { ...o, [field]: val };
+            
+            // Recalc total if qty/price/discount changes
+            if (field === 'quantity' || field === 'unitPrice' || field === 'discountAmount') {
+                const q = field === 'quantity' ? Number(val) : o.quantity;
+                const p = field === 'unitPrice' ? Number(val) : o.unitPrice;
+                const d = field === 'discountAmount' ? Number(val) : o.discountAmount;
+                updated.totalPrice = (q * p) - d;
+            }
+            return updated;
+        }));
+    };
+
+    const handleSave = () => {
+        if (selectedServices.length === 0) {
+            showToast('info', 'No services selected.');
+            return;
+        }
+        saveServiceOrders(selectedServices);
+        onClose();
+    };
+
+    const totalServiceAmount = selectedServices.reduce((sum, o) => sum + o.totalPrice, 0);
+
+    return (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white w-full max-w-[95vw] h-[90vh] rounded-lg shadow-2xl flex flex-col border border-slate-300 animate-in zoom-in-95 duration-200">
+                {/* Header */}
+                <div className="bg-slate-100 border-b border-slate-300 px-4 py-2 flex justify-between items-center shrink-0">
+                    <h3 className="font-bold text-slate-800 text-sm">Ordering Services</h3>
+                    <div className="flex gap-2">
+                        <button className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs font-bold transition-colors">Previous</button>
+                        <button className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs font-bold transition-colors">MI</button>
+                        <button onClick={onClose} className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs transition-colors"><X className="w-4 h-4"/></button>
+                    </div>
+                </div>
+
+                {/* Filters */}
+                <div className="p-3 bg-blue-50/50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-4 gap-4 text-xs items-end shrink-0">
+                    <div>
+                        <label className="block font-bold text-slate-600 mb-1">Service Type</label>
+                        <select className="w-full border border-slate-300 rounded p-1" value={filterServiceType} onChange={e => setFilterServiceType(e.target.value)}>
+                            <option value="All">-- Select --</option>
+                            <option value="Single service">Single Service</option>
+                            <option value="Package">Package</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block font-bold text-slate-600 mb-1">Department</label>
+                        <select className="w-full border border-slate-300 rounded p-1" value={filterDept} onChange={e => setFilterDept(e.target.value)}>
+                            <option value="All">-- Select --</option>
+                            {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block font-bold text-slate-600 mb-1">Service Center</label>
+                        <select className="w-full border border-slate-300 rounded p-1">
+                            <option value="All">All</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block font-bold text-slate-600 mb-1">Service Name</label>
+                        <input className="w-full border border-slate-300 rounded p-1" value={searchName} onChange={e => setSearchName(e.target.value)} />
+                    </div>
+                    <div className="md:col-span-4 flex items-center gap-4 mt-2">
+                        <label className="flex items-center gap-1 cursor-pointer select-none">
+                            <input type="checkbox" /> <span className="font-bold text-slate-600">Favourites</span>
+                        </label>
+                        <label className="flex items-center gap-1 cursor-pointer select-none">
+                            <input type="checkbox" checked={showOnlyCash} onChange={e => setShowOnlyCash(e.target.checked)} /> <span className="font-bold text-slate-600">Only Cash Service</span>
+                        </label>
+                        <div className="ml-auto flex gap-2">
+                            <button className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded font-bold text-xs">Sponsor Price</button>
+                            <button className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded font-bold text-xs">Base Price</button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Service Grid */}
+                <div className="flex-1 overflow-y-auto p-4 bg-white border-b border-slate-200 min-h-[200px]">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1 text-xs">
+                        {filteredServices.map(s => (
+                            <label key={s.id} className={`flex items-center gap-2 p-1 hover:bg-blue-50 cursor-pointer rounded border border-transparent hover:border-blue-100 ${selectedServices.some(o => o.serviceId === s.id) ? 'bg-blue-50 border-blue-200' : ''}`}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={selectedServices.some(o => o.serviceId === s.id)}
+                                    onChange={() => toggleService(s)}
+                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <span className="truncate" title={s.name}>{s.code} - {s.name}</span>
+                            </label>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Added Orders Table (Bottom) */}
+                <div className="h-64 flex flex-col bg-slate-50 shrink-0">
+                    <div className="bg-white border-b border-slate-200 px-4 py-1 flex justify-between items-center">
+                        <h4 className="font-bold text-slate-800 text-xs">Added Service Order</h4>
+                        <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs font-bold transition-colors">Add Service</button>
+                    </div>
+                    <div className="flex-1 overflow-auto">
+                        <table className="w-full text-xs text-left border-collapse">
+                            <thead className="bg-slate-200 text-slate-700 font-bold sticky top-0 z-10">
+                                <tr>
+                                    <th className="p-2 border-r border-slate-300">Service Name</th>
+                                    <th className="p-2 border-r border-slate-300 w-16">CPT</th>
+                                    <th className="p-2 border-r border-slate-300 w-16">Portable</th>
+                                    <th className="p-2 border-r border-slate-300 w-12 text-center">Qty</th>
+                                    <th className="p-2 border-r border-slate-300 w-24">Approval Req</th>
+                                    <th className="p-2 border-r border-slate-300 w-20 text-right">Unit Price</th>
+                                    <th className="p-2 border-r border-slate-300 w-20 text-right">Max Disc</th>
+                                    <th className="p-2 border-r border-slate-300 w-20 text-right">Discount</th>
+                                    <th className="p-2 border-r border-slate-300 w-20 text-right">Disc %</th>
+                                    <th className="p-2 border-r border-slate-300 w-24 text-right">Total Price</th>
+                                    <th className="p-2 border-r border-slate-300 w-10 text-center">FC</th>
+                                    <th className="p-2 border-r border-slate-300 w-16">Pkg Cover</th>
+                                    <th className="p-2 border-r border-slate-300 w-24">Service Center</th>
+                                    <th className="p-2 border-r border-slate-300 w-16">Policy</th>
+                                    <th className="p-2 border-r border-slate-300">Order Remarks</th>
+                                    <th className="p-2 w-16 text-center">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-slate-200">
+                                {selectedServices.map(order => (
+                                    <tr key={order.id} className="hover:bg-slate-50">
+                                        <td className="p-1 border-r border-slate-200 truncate max-w-[200px]">{order.serviceName}</td>
+                                        <td className="p-1 border-r border-slate-200">{order.cptCode}</td>
+                                        <td className="p-1 border-r border-slate-200 text-center"><input type="checkbox" /></td>
+                                        <td className="p-1 border-r border-slate-200">
+                                            <input 
+                                                type="number" className="w-full bg-yellow-50 border border-yellow-200 text-center rounded px-1"
+                                                value={order.quantity} onChange={e => updateOrder(order.id, 'quantity', e.target.value)}
+                                            />
+                                        </td>
+                                        <td className="p-1 border-r border-slate-200 text-center"><input type="checkbox" /></td>
+                                        <td className="p-1 border-r border-slate-200 text-right">{order.unitPrice.toFixed(2)}</td>
+                                        <td className="p-1 border-r border-slate-200 text-right">0.00</td>
+                                        <td className="p-1 border-r border-slate-200">
+                                            <input 
+                                                type="number" className="w-full bg-white border border-slate-200 text-right rounded px-1"
+                                                value={order.discountAmount} onChange={e => updateOrder(order.id, 'discountAmount', e.target.value)}
+                                            />
+                                        </td>
+                                        <td className="p-1 border-r border-slate-200 text-right">0.00</td>
+                                        <td className="p-1 border-r border-slate-200 text-right font-bold">{order.totalPrice.toFixed(2)}</td>
+                                        <td className="p-1 border-r border-slate-200 text-center"><input type="checkbox" /></td>
+                                        <td className="p-1 border-r border-slate-200 text-center">No</td>
+                                        <td className="p-1 border-r border-slate-200">{order.serviceCenter || 'General'}</td>
+                                        <td className="p-1 border-r border-slate-200"></td>
+                                        <td className="p-1 border-r border-slate-200">
+                                            <input 
+                                                className="w-full bg-white border border-slate-200 rounded px-1"
+                                                value={order.instructions || ''} onChange={e => updateOrder(order.id, 'instructions', e.target.value)}
+                                            />
+                                        </td>
+                                        <td className="p-1 text-center">
+                                            <button onClick={() => setSelectedServices(prev => prev.filter(o => o.id !== order.id))} className="text-red-500 hover:text-red-700">
+                                                <Trash2 className="w-3 h-3 mx-auto" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div className="bg-slate-100 p-2 border-t border-slate-300 text-xs font-bold text-blue-800 flex gap-4">
+                        <span>Total Service Amount : {totalServiceAmount.toFixed(2)}</span>
+                        <div className="flex items-center gap-2">
+                            <span className="text-red-600">Doctor Sugg. Amount</span>
+                            <input className="border border-slate-300 w-24 px-1" value="0.0" readOnly />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const CPOEView = ({ 
+    appointmentId, 
+    patientName,
+    doctorId,
+    onClose 
+}: { 
+    appointmentId: string, 
+    patientName: string,
+    doctorId: string,
+    onClose: () => void 
+}) => {
+    const { serviceOrders, employees } = useData();
+    const [showNewOrder, setShowNewOrder] = useState(false);
+    
+    // Filters
+    const [orderDateFrom, setOrderDateFrom] = useState(new Date().toISOString().split('T')[0]);
+    const [orderDateTo, setOrderDateTo] = useState(new Date().toISOString().split('T')[0]);
+    const [statusFilter, setStatusFilter] = useState('All');
+
+    const appointmentOrders = serviceOrders.filter(o => o.appointmentId === appointmentId);
+
+    const getDocName = (id: string) => {
+        const d = employees.find(e => e.id === id);
+        return d ? `Dr. ${d.firstName} ${d.lastName}` : '';
+    };
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            {showNewOrder && <ServiceOrderingModal appointmentId={appointmentId} doctorId={doctorId} onClose={() => setShowNewOrder(false)} />}
+            
+            <div className="bg-white w-full max-w-[95vw] h-[90vh] rounded-lg shadow-2xl flex flex-col overflow-hidden border border-slate-200">
+                {/* Header Tabs */}
+                <div className="flex border-b border-slate-300 bg-slate-100 px-2 pt-2 gap-1 shrink-0">
+                    <div className="bg-slate-200 px-4 py-1.5 rounded-t-lg text-sm font-bold text-slate-700 border-t border-l border-r border-slate-300">Services</div>
+                    <div className="bg-cyan-600 px-4 py-1.5 rounded-t-lg text-sm font-bold text-white flex items-center gap-2"><Pill className="w-3 h-3"/> Pharmacy</div>
+                    <div className="bg-teal-600 px-4 py-1.5 rounded-t-lg text-sm font-bold text-white flex items-center gap-2"><Briefcase className="w-3 h-3"/> Package</div>
+                    <div className="bg-blue-500 px-4 py-1.5 rounded-t-lg text-sm font-bold text-white flex items-center gap-2"><FileText className="w-3 h-3"/> Patient Contract</div>
+                    <button onClick={onClose} className="ml-auto text-slate-500 hover:text-red-500 p-1"><XCircle className="w-5 h-5"/></button>
+                </div>
+
+                {/* Filter Bar */}
+                <div className="bg-blue-50/50 p-3 border-b border-slate-200 text-xs shrink-0">
+                    <div className="font-bold text-slate-800 mb-2 border-b border-slate-200 pb-1 flex justify-between items-center">
+                        <span>Existing Service Order</span>
+                        <button 
+                            onClick={() => setShowNewOrder(true)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded shadow-sm transition-colors"
+                        >
+                            New Orders
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                        <div>
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="w-28 font-bold text-slate-600">Ordered Date From</span>
+                                <input type="date" className="border border-slate-300 rounded px-1" value={orderDateFrom} onChange={e => setOrderDateFrom(e.target.value)} />
+                                <span className="font-bold text-slate-600">To</span>
+                                <input type="date" className="border border-slate-300 rounded px-1" value={orderDateTo} onChange={e => setOrderDateTo(e.target.value)} />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="w-28 font-bold text-slate-600">Ordered From</span>
+                                <input className="border border-slate-300 rounded px-1 flex-1" />
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className="w-28 font-bold text-slate-600">Visit</span>
+                                <label className="flex items-center gap-1"><input type="radio" name="visit" defaultChecked /> Current</label>
+                                <label className="flex items-center gap-1"><input type="radio" name="visit" /> All</label>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="w-24 font-bold text-slate-600">Status</span>
+                                <select className="border border-slate-300 rounded px-1 flex-1">
+                                    <option>-- Select --</option>
+                                    <option>Ordered</option>
+                                    <option>Cancelled</option>
+                                </select>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="w-24 font-bold text-slate-600">Ordered By</span>
+                                <select className="border border-slate-300 rounded px-1 flex-1">
+                                    <option>-- Select --</option>
+                                </select>
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className="w-24 font-bold text-slate-600">ServiceOrder No</span>
+                                <input className="border border-slate-300 rounded px-1 flex-1" />
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="w-24 font-bold text-slate-600">Service Name</span>
+                                <input className="border border-slate-300 rounded px-1 flex-1" />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="w-24 font-bold text-slate-600">Order Type</span>
+                                <select className="border border-slate-300 rounded px-1 flex-1">
+                                    <option>-- Select --</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end">
+                            <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded font-bold shadow-sm">Search</button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Data Grid */}
+                <div className="flex-1 overflow-auto bg-white border-b border-slate-200">
+                    <table className="w-full text-xs text-left border-collapse">
+                        <thead className="bg-slate-200 text-slate-700 font-bold sticky top-0 z-10 whitespace-nowrap">
+                            <tr>
+                                <th className="p-2 border-r border-slate-300">Service Name</th>
+                                <th className="p-2 border-r border-slate-300">CPT Code</th>
+                                <th className="p-2 border-r border-slate-300">Order No</th>
+                                <th className="p-2 border-r border-slate-300">Portable</th>
+                                <th className="p-2 border-r border-slate-300">Qty</th>
+                                <th className="p-2 border-r border-slate-300 text-right">Unit Price</th>
+                                <th className="p-2 border-r border-slate-300 text-right">ContractAmt</th>
+                                <th className="p-2 border-r border-slate-300 text-right">Discount Amount</th>
+                                <th className="p-2 border-r border-slate-300 text-right">Total Price</th>
+                                <th className="p-2 border-r border-slate-300">Ordered Date</th>
+                                <th className="p-2 border-r border-slate-300">Status</th>
+                                <th className="p-2 border-r border-slate-300">Result Status</th>
+                                <th className="p-2 border-r border-slate-300">Package Cover</th>
+                                <th className="p-2 border-r border-slate-300">Billing Status</th>
+                                <th className="p-2 border-r border-slate-300">Priority</th>
+                                <th className="p-2 border-r border-slate-300">Service Center</th>
+                                <th className="p-2 border-r border-slate-300">Consulting Doctor</th>
+                                <th className="p-2 border-r border-slate-300">Ordered Doctor</th>
+                                <th className="p-2 border-r border-slate-300">Plan</th>
+                                <th className="p-2 border-r border-slate-300">Patient Form</th>
+                                <th className="p-2 border-r border-slate-300">Appr. Sts.</th>
+                                <th className="p-2 border-r border-slate-300">ICD-Tooth</th>
+                                <th className="p-2 border-r border-slate-300">Done/Not Done</th>
+                                <th className="p-2 text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                            {appointmentOrders.length === 0 ? (
+                                <tr><td colSpan={24} className="p-12 text-center text-slate-400 italic">No services ordered for this visit.</td></tr>
+                            ) : (
+                                appointmentOrders.map(order => (
+                                    <tr key={order.id} className="hover:bg-slate-50 whitespace-nowrap">
+                                        <td className="p-2 border-r border-slate-200 font-medium">{order.serviceName}</td>
+                                        <td className="p-2 border-r border-slate-200">{order.cptCode}</td>
+                                        <td className="p-2 border-r border-slate-200 text-blue-600 font-medium">ORD-{order.id.slice(-6)}</td>
+                                        <td className="p-2 border-r border-slate-200">No</td>
+                                        <td className="p-2 border-r border-slate-200 text-center">{order.quantity}</td>
+                                        <td className="p-2 border-r border-slate-200 text-right font-bold">{order.unitPrice.toFixed(2)}</td>
+                                        <td className="p-2 border-r border-slate-200 text-right">0.00</td>
+                                        <td className="p-2 border-r border-slate-200 text-right">{order.discountAmount.toFixed(2)}</td>
+                                        <td className="p-2 border-r border-slate-200 text-right font-bold">{order.totalPrice.toFixed(2)}</td>
+                                        <td className="p-2 border-r border-slate-200">{new Date(order.orderDate).toLocaleString()}</td>
+                                        <td className="p-2 border-r border-slate-200">
+                                            <span className={`px-1 py-0.5 rounded text-[10px] ${order.status === 'Ordered' ? 'text-red-500' : 'text-green-500'}`}>{order.status}</span>
+                                        </td>
+                                        <td className="p-2 border-r border-slate-200"></td>
+                                        <td className="p-2 border-r border-slate-200">No</td>
+                                        <td className="p-2 border-r border-slate-200 text-red-500">{order.billingStatus}</td>
+                                        <td className="p-2 border-r border-slate-200 text-red-500">{order.priority}</td>
+                                        <td className="p-2 border-r border-slate-200">{order.serviceCenter || 'General'}</td>
+                                        <td className="p-2 border-r border-slate-200">{getDocName(doctorId)}</td>
+                                        <td className="p-2 border-r border-slate-200">{getDocName(order.orderingDoctorId)}</td>
+                                        <td className="p-2 border-r border-slate-200">C001/Cash</td>
+                                        <td className="p-2 border-r border-slate-200"></td>
+                                        <td className="p-2 border-r border-slate-200"></td>
+                                        <td className="p-2 border-r border-slate-200">-</td>
+                                        <td className="p-2 border-r border-slate-200">
+                                            <select className="border border-slate-300 rounded text-[10px]">
+                                                <option>Not Done</option>
+                                                <option>Done</option>
+                                            </select>
+                                            <button className="bg-blue-500 text-white px-1 ml-1 rounded text-[10px]">Update</button>
+                                        </td>
+                                        <td className="p-2 text-center flex items-center justify-center gap-1">
+                                            <button className="text-blue-600"><Edit className="w-3 h-3" /></button>
+                                            <button className="text-red-500"><Trash2 className="w-3 h-3" /></button>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* Footer Buttons */}
+                <div className="bg-white p-3 border-t border-slate-200 flex justify-between items-center shrink-0">
+                    <button onClick={onClose} className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded font-bold text-xs">Cancel</button>
+                    <div className="flex gap-2">
+                        <button className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-1.5 rounded font-bold text-xs">Pharmacy</button>
+                        <button className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-1.5 rounded font-bold text-xs">Print Orders</button>
+                        <button className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-1.5 rounded font-bold text-xs">End Encounter</button>
+                        <button className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-1.5 rounded font-bold text-xs">Download As PDF</button>
+                        <button className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-1.5 rounded font-bold text-xs">Cancel Encounter</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ... (Existing Modals: VitalsEntryModal, AllergyEntryModal, DiagnosisEntryModal) -> Retaining them below but truncating for brevity in this delta as they are unchanged from previous file except imports
+
+// Re-including VitalsEntryModal etc. for full file context if needed, but since I am replacing the file content, I must include everything.
 
 const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, onClose: () => void }) => {
+    // ... [Same implementation as before]
     const { vitals, saveVitalSign } = useData();
     const existingVital = vitals.find(v => v.appointmentId === appointmentId);
 
@@ -164,8 +620,6 @@ const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, o
 
                 <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        
-                        {/* Card 1: Blood Pressure & Heart */}
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2 uppercase tracking-wide border-b border-slate-100 pb-2">
                                 <Activity className="w-4 h-4 text-red-500" /> Cardiovascular
@@ -177,8 +631,6 @@ const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, o
                                 <VitalField label="MAP" _key="map" unit="mmHg" range="70-100" isCalc />
                             </div>
                         </div>
-
-                        {/* Card 2: Respiratory & Temp */}
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2 uppercase tracking-wide border-b border-slate-100 pb-2">
                                 <Wind className="w-4 h-4 text-blue-500" /> Respiratory & General
@@ -189,8 +641,6 @@ const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, o
                                 <VitalField label="Resp. Rate" _key="rr" unit="bpm" range="12-20" />
                             </div>
                         </div>
-
-                        {/* Card 3: Anthropometry */}
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm md:col-span-2">
                             <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2 uppercase tracking-wide border-b border-slate-100 pb-2">
                                 <Scale className="w-4 h-4 text-emerald-500" /> Anthropometry
@@ -201,8 +651,6 @@ const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, o
                                 <VitalField label="BMI" _key="bmi" unit="kg/m²" isCalc />
                             </div>
                         </div>
-
-                        {/* Card 4: History */}
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm md:col-span-2">
                             <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2 uppercase tracking-wide border-b border-slate-100 pb-2">
                                 <History className="w-4 h-4 text-purple-500" /> Social History
@@ -220,11 +668,8 @@ const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, o
                                 </div>
                             </div>
                         </div>
-
                     </div>
                 </div>
-
-                {/* Footer */}
                 <div className="bg-white border-t border-slate-200 p-4 flex justify-end gap-3 shrink-0">
                     <button onClick={onClose} className="px-5 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 transition-colors">Cancel</button>
                     <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2.5 rounded-lg font-bold shadow-md shadow-blue-200 transition-all flex items-center gap-2">
@@ -237,6 +682,7 @@ const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, o
 };
 
 const AllergyEntryModal = ({ patientId, onClose }: { patientId: string, onClose: () => void }) => {
+    // ... [Same implementation]
     const { allergies, saveAllergy, showToast } = useData();
     const patientAllergies = allergies.filter(a => a.patientId === patientId);
 
@@ -254,12 +700,11 @@ const AllergyEntryModal = ({ patientId, onClose }: { patientId: string, onClose:
 
     const handleSave = () => {
         if (noKnownAllergies) {
-            // Save a specific record indicating No Known Allergies
             saveAllergy({
                 id: Date.now().toString(),
                 patientId,
                 allergen: 'No Known Allergies',
-                allergyType: 'NKA', // Specific code for No Known Allergies
+                allergyType: 'NKA', 
                 severity: '',
                 reaction: '',
                 status: 'Active',
@@ -281,7 +726,7 @@ const AllergyEntryModal = ({ patientId, onClose }: { patientId: string, onClose:
             patientId,
             allergen: form.allergicTo,
             allergyType: form.allergyType,
-            severity: 'Moderate', // Default for now as not in detailed form
+            severity: 'Moderate', 
             status: form.allergyStatus as 'Active' | 'Resolved',
             onsetDate: form.onsetDate,
             resolvedDate: form.resolvedDate,
@@ -289,7 +734,6 @@ const AllergyEntryModal = ({ patientId, onClose }: { patientId: string, onClose:
             remarks: form.remarks
         });
         
-        // Reset form for next entry
         setForm({
             allergyType: '', allergicTo: '', onSet: '', onsetDate: '',
             allergyStatus: 'Active', resolvedDate: '', remarks: ''
@@ -308,7 +752,6 @@ const AllergyEntryModal = ({ patientId, onClose }: { patientId: string, onClose:
     return (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-                {/* Header */}
                 <div className="bg-slate-800 px-5 py-3 flex justify-between items-center text-white shrink-0">
                     <h3 className="font-bold text-base flex items-center gap-2">
                         <Bell className="w-5 h-5 text-red-400" /> Allergy Management
@@ -317,9 +760,7 @@ const AllergyEntryModal = ({ patientId, onClose }: { patientId: string, onClose:
                         <XCircle className="w-5 h-5" />
                     </button>
                 </div>
-
                 <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
-                    {/* Left: Existing List */}
                     <div className="flex-1 bg-slate-50 border-r border-slate-200 flex flex-col overflow-hidden">
                         <div className="p-3 bg-slate-100 border-b border-slate-200 font-bold text-slate-700 text-sm">
                             Existing Allergy
@@ -357,8 +798,6 @@ const AllergyEntryModal = ({ patientId, onClose }: { patientId: string, onClose:
                             </table>
                         </div>
                     </div>
-
-                    {/* Right: Form */}
                     <div className="flex-[1.2] flex flex-col bg-white overflow-y-auto">
                         <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-blue-50/30">
                             <label className="flex items-center gap-2 font-bold text-slate-700 cursor-pointer select-none">
@@ -381,10 +820,8 @@ const AllergyEntryModal = ({ patientId, onClose }: { patientId: string, onClose:
                                 <Plus className="w-3 h-3" /> New Allergy
                             </button>
                         </div>
-
                         <div className={`p-6 space-y-4 ${noKnownAllergies ? 'opacity-50 pointer-events-none' : ''}`}>
                             <h4 className="font-bold text-slate-800 border-b border-slate-200 pb-2">Allergy Details</h4>
-                            
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="text-xs font-bold text-slate-600 block mb-1">Allergy Type</label>
@@ -407,7 +844,6 @@ const AllergyEntryModal = ({ patientId, onClose }: { patientId: string, onClose:
                                     />
                                 </div>
                             </div>
-
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="text-xs font-bold text-slate-600 block mb-1">Onset Date</label>
@@ -430,7 +866,6 @@ const AllergyEntryModal = ({ patientId, onClose }: { patientId: string, onClose:
                                     </select>
                                 </div>
                             </div>
-
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="text-xs font-bold text-slate-600 block mb-1">Resolved Date</label>
@@ -443,7 +878,6 @@ const AllergyEntryModal = ({ patientId, onClose }: { patientId: string, onClose:
                                     />
                                 </div>
                             </div>
-
                             <div>
                                 <label className="text-xs font-bold text-slate-600 block mb-1">Reactions</label>
                                 <div className="border border-slate-300 rounded h-32 overflow-y-auto p-2 bg-slate-50">
@@ -462,7 +896,6 @@ const AllergyEntryModal = ({ patientId, onClose }: { patientId: string, onClose:
                                     </div>
                                 </div>
                             </div>
-
                             <div>
                                 <label className="text-xs font-bold text-slate-600 block mb-1">Remarks</label>
                                 <textarea 
@@ -472,7 +905,6 @@ const AllergyEntryModal = ({ patientId, onClose }: { patientId: string, onClose:
                                 ></textarea>
                             </div>
                         </div>
-
                         <div className="p-4 border-t border-slate-200 mt-auto flex justify-end gap-3">
                             <button onClick={onClose} className="px-5 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-medium hover:bg-white hover:border-slate-400 transition-colors">
                                 Cancel
@@ -492,6 +924,7 @@ const AllergyEntryModal = ({ patientId, onClose }: { patientId: string, onClose:
 };
 
 const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string, onClose: () => void }) => {
+    // ... [Same implementation]
     const { 
         diagnoses, saveDiagnosis, deleteDiagnosis, 
         narrativeDiagnoses, saveNarrativeDiagnosis, showToast,
@@ -519,11 +952,9 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
     const [searchResultsSecondary, setSearchResultsSecondary] = useState(availableCodes);
     const [noComorbidities, setNoComorbidities] = useState(false);
     
-    // Present On Admission checkboxes for new entries
     const [isPoaPrimary, setIsPoaPrimary] = useState(true);
     const [isPoaSecondary, setIsPoaSecondary] = useState(false);
 
-    // Filter existing diagnoses for this visit
     const primaryDiagnoses = diagnoses.filter(d => d.appointmentId === appointmentId && d.type === 'Primary');
     const secondaryDiagnoses = diagnoses.filter(d => d.appointmentId === appointmentId && d.type === 'Secondary');
 
@@ -546,7 +977,6 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
 
     // -- Handlers --
     const handleAddDiagnosis = (icd: {code: string, description: string}, type: 'Primary' | 'Secondary') => {
-        // Prevent duplicate ICDs for the same type
         const exists = diagnoses.some(d => d.appointmentId === appointmentId && d.type === type && d.icdCode === icd.code);
         if (exists) {
             showToast('info', 'Diagnosis already added.');
@@ -593,7 +1023,6 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
     return (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-                {/* Header */}
                 <div className="bg-slate-800 px-5 py-3 flex justify-between items-center text-white shrink-0">
                     <h3 className="font-bold text-base flex items-center gap-2">
                         <Info className="w-5 h-5 text-amber-400" /> Diagnosis Entry
@@ -602,10 +1031,7 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
                         <XCircle className="w-5 h-5" />
                     </button>
                 </div>
-
                 <div className="flex-1 overflow-y-auto bg-slate-50 p-6 space-y-6">
-                    
-                    {/* SECTION 1: Narrative Diagnosis */}
                     <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
                         <div className="grid grid-cols-2 gap-4 mb-4">
                             <div>
@@ -659,7 +1085,6 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
                                 </select>
                             </div>
                         </div>
-
                         <div>
                             <label className="text-xs font-bold text-blue-700 block mb-1">Narrative Diagnosis</label>
                             <div className="border border-slate-300 rounded overflow-hidden">
@@ -680,8 +1105,6 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
                             </div>
                         </div>
                     </div>
-
-                    {/* SECTION 2: Primary Diagnosis */}
                     <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
                         <div className="flex justify-between items-start mb-2">
                             <h4 className="font-bold text-blue-700 text-sm">Primary Diagnosis<span className="text-red-500">*</span></h4>
@@ -723,13 +1146,11 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
                                 )}
                             </div>
                         </div>
-                        
                         <div className="flex gap-4 text-xs mb-3 text-slate-600 font-medium">
                             <label className="flex items-center gap-1 cursor-pointer"><input type="radio" name="pd_type" defaultChecked /> All</label>
                             <label className="flex items-center gap-1 cursor-pointer"><input type="radio" name="pd_type" /> Internal Medicine</label>
                             <label className="flex items-center gap-1 cursor-pointer"><input type="radio" name="pd_type" /> Favourites</label>
                         </div>
-
                         <div className="border border-slate-300 rounded bg-slate-50 min-h-[60px]">
                             {primaryDiagnoses.map(d => (
                                 <div key={d.id} className="flex justify-between items-center p-2 border-b border-slate-200 bg-slate-200/50">
@@ -751,8 +1172,6 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
                             {primaryDiagnoses.length === 0 && <div className="p-4 text-center text-xs text-slate-400 italic">No primary diagnosis selected</div>}
                         </div>
                     </div>
-
-                    {/* SECTION 3: Secondary Diagnosis */}
                     <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
                         <div className="flex justify-between items-start mb-2">
                             <h4 className="font-bold text-blue-700 text-sm">Secondary Diagnosis<span className="text-red-500">*</span></h4>
@@ -768,7 +1187,6 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
                                 </label>
                             </div>
                         </div>
-
                         {!noComorbidities && (
                             <>
                                 <div className="flex justify-end mb-2 relative">
@@ -808,7 +1226,6 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
                                         </div>
                                     )}
                                 </div>
-
                                 <div className="border border-slate-300 rounded bg-slate-50 min-h-[60px]">
                                     {secondaryDiagnoses.map(d => (
                                         <div key={d.id} className="flex justify-between items-center p-2 border-b border-slate-200 bg-slate-200/50">
@@ -837,10 +1254,7 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
                             </div>
                         )}
                     </div>
-
                 </div>
-
-                {/* Footer */}
                 <div className="p-4 bg-slate-100 border-t border-slate-300 shrink-0 flex justify-end items-center gap-3">
                     <button onClick={onClose} className="px-5 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm font-medium hover:bg-white hover:border-slate-400 transition-colors">
                         Cancel
@@ -865,6 +1279,7 @@ export const Consultation = () => {
   const [showVitals, setShowVitals] = useState(false);
   const [showAllergy, setShowAllergy] = useState(false);
   const [showDiagnosis, setShowDiagnosis] = useState(false);
+  const [showCPOE, setShowCPOE] = useState(false);
   
   const appointment = appointments.find(a => a.id === appointmentId);
   const patient = patients.find(p => p.id === appointment?.patientId);
@@ -887,6 +1302,7 @@ export const Consultation = () => {
           if (e.key === 'F7') { e.preventDefault(); setShowVitals(true); }
           if (e.key === 'F8') { e.preventDefault(); setShowAllergy(true); }
           if (e.key === 'F5') { e.preventDefault(); setShowDiagnosis(true); }
+          if (e.key === 'F3') { e.preventDefault(); setShowCPOE(true); }
       };
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
@@ -913,11 +1329,10 @@ export const Consultation = () => {
                 const doc = employees.find(e => e.id === apt.doctorId);
                 const dept = departments.find(d => d.id === apt.departmentId);
                 const aptDiagnoses = diagnoses.filter(d => d.appointmentId === apt.id);
-                const aptVitals = vitals.find(v => v.appointmentId === apt.id); // Assuming one record per visit or getting latest
+                const aptVitals = vitals.find(v => v.appointmentId === apt.id);
 
                 return (
                     <div key={apt.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors bg-slate-50/50">
-                        {/* Header */}
                         <div className="flex justify-between items-start mb-3">
                             <div>
                                 <div className="font-bold text-slate-800 text-sm flex items-center gap-2">
@@ -937,8 +1352,6 @@ export const Consultation = () => {
                                 {apt.status}
                             </span>
                         </div>
-
-                        {/* Diagnoses */}
                         {aptDiagnoses.length > 0 && (
                             <div className="mb-3 ml-6">
                                 <div className="text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1">
@@ -953,8 +1366,6 @@ export const Consultation = () => {
                                 </div>
                             </div>
                         )}
-
-                        {/* Vitals Summary */}
                         {aptVitals && (
                             <div className="ml-6 mb-3">
                                 <div className="text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1">
@@ -969,8 +1380,6 @@ export const Consultation = () => {
                                 </div>
                             </div>
                         )}
-                        
-                        {/* Note Snippet */}
                         {apt.notes && (
                              <div className="mt-3 ml-6 text-xs text-slate-500 italic border-t border-slate-200 pt-2 flex items-start gap-1">
                                 <FileText className="w-3 h-3 shrink-0 mt-0.5" />
@@ -990,6 +1399,7 @@ export const Consultation = () => {
         {showVitals && <VitalsEntryModal appointmentId={appointment.id} onClose={() => setShowVitals(false)} />}
         {showAllergy && <AllergyEntryModal patientId={patient.id} onClose={() => setShowAllergy(false)} />}
         {showDiagnosis && <DiagnosisEntryModal appointmentId={appointment.id} onClose={() => setShowDiagnosis(false)} />}
+        {showCPOE && <CPOEView appointmentId={appointment.id} patientName={`${patient.firstName} ${patient.lastName}`} doctorId={employee?.id || ''} onClose={() => setShowCPOE(false)} />}
 
         {/* 1. Sub-Header (White) */}
         <div className="bg-white px-6 py-2 border-b border-slate-200 flex justify-between items-center shrink-0 shadow-sm z-20 h-14">
@@ -1072,6 +1482,7 @@ export const Consultation = () => {
                                 if(tool.id === 'Vitals') setShowVitals(true);
                                 if(tool.id === 'Allergy') setShowAllergy(true);
                                 if(tool.id === 'Diagnosis') setShowDiagnosis(true);
+                                if(tool.id === 'Orders') setShowCPOE(true);
                             }}
                             className="flex flex-col items-center justify-center min-w-[70px] p-2 hover:bg-slate-50 rounded-lg transition-all group"
                         >
@@ -1092,7 +1503,6 @@ export const Consultation = () => {
 
         {/* 4. Workspace (Sidebar + Content) */}
         <div className="flex-1 flex overflow-hidden">
-            {/* Sidebar */}
             <div className="w-64 bg-slate-900 text-slate-400 flex flex-col shrink-0 border-r border-slate-800">
                 <div className="flex-1 overflow-y-auto py-2">
                     {SIDEBAR_ITEMS.map(item => (
@@ -1119,7 +1529,6 @@ export const Consultation = () => {
                 </div>
             </div>
 
-            {/* Main Content Area */}
             <div className="flex-1 overflow-y-auto p-8 bg-slate-100">
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 min-h-full p-8 relative">
                     <h3 className="text-xl font-bold text-slate-800 mb-6 border-b pb-4 flex items-center gap-3">

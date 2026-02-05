@@ -1,3 +1,4 @@
+
 // Simulating Database Schema
 
 export interface MasterEntity {
@@ -66,6 +67,26 @@ export interface ServiceDefinition {
   specialInstructions?: string;
   // Optional for frontend convenience to store nested tariffs
   tariffs?: ServiceTariff[];
+}
+
+// NEW: CPOE Service Order
+export interface ServiceOrder {
+  id: string;
+  appointmentId: string;
+  serviceId: string;
+  serviceName: string;
+  cptCode?: string;
+  quantity: number;
+  unitPrice: number;
+  discountAmount: number;
+  totalPrice: number;
+  orderDate: string;
+  status: 'Ordered' | 'Cancelled' | 'Completed';
+  billingStatus: 'Invoiced' | 'Pending';
+  priority: 'Routine' | 'Urgent';
+  orderingDoctorId: string;
+  instructions?: string;
+  serviceCenter?: string;
 }
 
 export enum EmployeeRole {

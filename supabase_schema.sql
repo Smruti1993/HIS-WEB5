@@ -1,3 +1,4 @@
+
 -- ==========================================
 -- MIGRATION COMMANDS (Safe to run if tables exist)
 -- ==========================================
@@ -76,6 +77,27 @@ CREATE TABLE IF NOT EXISTS service_tariffs (
     price NUMERIC(10, 2) DEFAULT 0,
     effective_date DATE DEFAULT CURRENT_DATE,
     status TEXT DEFAULT 'Active',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 7. New Table: Service Orders (CPOE)
+CREATE TABLE IF NOT EXISTS service_orders (
+    id TEXT PRIMARY KEY,
+    appointment_id TEXT REFERENCES appointments(id) ON DELETE CASCADE,
+    service_id TEXT REFERENCES service_definitions(id) ON DELETE SET NULL,
+    service_name TEXT, -- Snapshot
+    cpt_code TEXT, -- Snapshot
+    quantity INTEGER DEFAULT 1,
+    unit_price NUMERIC(10, 2) DEFAULT 0,
+    discount_amount NUMERIC(10, 2) DEFAULT 0,
+    total_price NUMERIC(10, 2) DEFAULT 0,
+    order_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    status TEXT DEFAULT 'Ordered',
+    billing_status TEXT DEFAULT 'Pending',
+    priority TEXT DEFAULT 'Routine',
+    ordering_doctor_id TEXT REFERENCES employees(id) ON DELETE SET NULL,
+    instructions TEXT,
+    service_center TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -280,6 +302,7 @@ CREATE INDEX IF NOT EXISTS idx_employees_dept ON employees(department_id);
 CREATE INDEX IF NOT EXISTS idx_master_diagnoses_desc ON master_diagnoses(description);
 CREATE INDEX IF NOT EXISTS idx_service_defs_code ON service_definitions(code);
 CREATE INDEX IF NOT EXISTS idx_service_tariffs_service ON service_tariffs(service_id);
+CREATE INDEX IF NOT EXISTS idx_service_orders_appt ON service_orders(appointment_id);
 
 -- RLS (Open Access for Development)
 ALTER TABLE departments ENABLE ROW LEVEL SECURITY;
@@ -301,6 +324,7 @@ ALTER TABLE clinical_notes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE service_definitions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE service_tariffs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE service_orders ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Enable all access for all users" ON departments FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON units FOR ALL USING (true) WITH CHECK (true);
@@ -321,3 +345,4 @@ CREATE POLICY "Enable all access for all users" ON clinical_notes FOR ALL USING 
 CREATE POLICY "Enable all access for all users" ON service_definitions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON app_users FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all access for all users" ON service_tariffs FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for all users" ON service_orders FOR ALL USING (true) WITH CHECK (true);
