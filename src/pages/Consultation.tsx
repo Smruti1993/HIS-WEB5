@@ -486,18 +486,6 @@ const CPOEView = ({
                         </tbody>
                     </table>
                 </div>
-
-                {/* Footer Buttons */}
-                <div className="bg-white p-3 border-t border-slate-200 flex justify-between items-center shrink-0">
-                    <button onClick={onClose} className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded font-bold text-xs">Cancel</button>
-                    <div className="flex gap-2">
-                        <button className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-1.5 rounded font-bold text-xs">Pharmacy</button>
-                        <button className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-1.5 rounded font-bold text-xs">Print Orders</button>
-                        <button className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-1.5 rounded font-bold text-xs">End Encounter</button>
-                        <button className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-1.5 rounded font-bold text-xs">Download As PDF</button>
-                        <button className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-1.5 rounded font-bold text-xs">Cancel Encounter</button>
-                    </div>
-                </div>
             </div>
         </div>
     );
