@@ -438,14 +438,37 @@ export const Appointments = () => {
       const availability = availabilities.find(a => a.doctorId === selectedDoctor && a.dayOfWeek === dayOfWeek);
       
       const slots = [];
-      const startHour = 8;
-      const endHour = 18;
       
+      // Determine View Range
+      let startHour = 8; // Default 08:00
+      let endHour = 20;  // Default 20:00
+
+      if (availability) {
+          const [sH] = availability.startTime.split(':').map(Number);
+          const [eH, eM] = availability.endTime.split(':').map(Number);
+          
+          if (sH < startHour) startHour = sH;
+          
+          // If end time involves minutes (e.g. 23:12), we need to go to the next hour (24) to show the slot starting at 23:00 or 23:15
+          let viewEnd = eH;
+          if (eM > 0) viewEnd += 1;
+          
+          if (viewEnd > endHour) endHour = viewEnd;
+      }
+      
+      // Cap at 24 hours
+      if (endHour > 24) endHour = 24;
+
       let current = new Date(selectedDateObj);
       current.setHours(startHour, 0, 0, 0);
       
       const endTime = new Date(selectedDateObj);
       endTime.setHours(endHour, 0, 0, 0);
+      // Handle midnight wrap if endHour is 24
+      if (endHour === 24) {
+          endTime.setDate(endTime.getDate() + 1);
+          endTime.setHours(0, 0, 0, 0);
+      }
 
       while(current < endTime) {
           const timeStr = current.toTimeString().substring(0, 5);
