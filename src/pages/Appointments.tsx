@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { useData } from '../context/DataContext';
 import { analyzeSymptoms } from '../services/geminiService';
-import { Sparkles, Loader2, Calendar, Clock, AlertCircle, Filter, RefreshCw, XCircle, AlertTriangle } from 'lucide-react';
+import { Sparkles, Loader2, Calendar as CalendarIcon, Clock, AlertCircle, Filter, RefreshCw, XCircle, AlertTriangle, ChevronLeft, ChevronRight, User, Check } from 'lucide-react';
 
 export const Appointments = () => {
   const { 
@@ -16,11 +17,14 @@ export const Appointments = () => {
 
   const [selectedDept, setSelectedDept] = useState('');
   const [selectedDoctor, setSelectedDoctor] = useState('');
-  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedDate, setSelectedDate] = useState(''); // YYYY-MM-DD
   const [selectedPatient, setSelectedPatient] = useState('');
   const [visitType, setVisitType] = useState<'New Visit' | 'Follow-up'>('New Visit');
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [selectedSlot, setSelectedSlot] = useState('');
+
+  // --- Calendar State ---
+  const [viewDate, setViewDate] = useState(new Date()); // Tracks the month being viewed
 
   // --- Filter State ---
   const [filterStartDate, setFilterStartDate] = useState('');
@@ -34,6 +38,53 @@ export const Appointments = () => {
 
   // --- Derived Data ---
   const currentPatient = patients.find(p => p.id === selectedPatient);
+  const bookingDoctors = employees.filter(e => e.role === 'Doctor' && e.departmentId === selectedDept);
+  const allDoctors = employees.filter(e => e.role === 'Doctor');
+
+  // --- Calendar Helpers ---
+  const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
+
+  // Check if doctor works on a specific day of week (0-6)
+  const isDoctorAvailableOnDay = (dayOfWeek: number) => {
+      if (!selectedDoctor) return false;
+      return availabilities.some(a => a.doctorId === selectedDoctor && a.dayOfWeek === dayOfWeek);
+  };
+
+  const calendarDays = useMemo(() => {
+      const year = viewDate.getFullYear();
+      const month = viewDate.getMonth();
+      const daysInMonth = getDaysInMonth(year, month);
+      const firstDay = getFirstDayOfMonth(year, month);
+      
+      const days = [];
+      // Empty slots for alignment
+      for (let i = 0; i < firstDay; i++) {
+          days.push(null);
+      }
+      
+      // Actual days
+      for (let d = 1; d <= daysInMonth; d++) {
+          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+          const dateObj = new Date(year, month, d);
+          const dayOfWeek = dateObj.getDay();
+          const isAvailable = isDoctorAvailableOnDay(dayOfWeek);
+          
+          // Check if date is in the past
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const isPast = dateObj < today;
+
+          days.push({
+              day: d,
+              fullDate: dateStr,
+              isAvailable: isAvailable && !isPast,
+              isPast: isPast,
+              isToday: dateObj.getTime() === today.getTime()
+          });
+      }
+      return days;
+  }, [viewDate, selectedDoctor, availabilities]);
 
   // --- Handlers ---
   const handleAiTriage = async () => {
@@ -64,7 +115,6 @@ export const Appointments = () => {
         const result = await analyzeSymptoms(symptoms, departments.map(d => d.name), patientContext);
         
         if (result) {
-            // Check if analysis returned a valid department (success case)
             if (result.departmentName) {
                 setAiAnalysis(result);
                 const dept = departments.find(d => d.name === result.departmentName);
@@ -72,14 +122,10 @@ export const Appointments = () => {
                     setSelectedDept(dept.id);
                     showToast('success', `Suggesting ${dept.name}`);
                 } else {
-                    showToast('info', `Suggested department '${result.departmentName}' not found in system.`);
+                    showToast('info', `Suggested department '${result.departmentName}' not found.`);
                 }
             } else {
-                // Handle Error / Failure case from Service
-                // The service returns departmentName: null and reasoning: error_message in catch blocks
-                showToast('error', result.reasoning || 'AI analysis could not determine a department.');
-                // Optionally log to console for debugging
-                console.warn('AI Triage Failure:', result.reasoning);
+                showToast('error', result.reasoning || 'AI analysis failed.');
             }
         } else {
             showToast('error', 'AI Service is currently unavailable.');
@@ -99,7 +145,6 @@ export const Appointments = () => {
         return;
     }
 
-    // Use local time for day index calculation to avoid UTC offset issues
     const dateObj = new Date(selectedDate + 'T00:00:00');
     const dayIndex = dateObj.getDay();
     const availability = availabilities.find(a => a.doctorId === selectedDoctor && a.dayOfWeek === dayIndex);
@@ -110,8 +155,17 @@ export const Appointments = () => {
     }
 
     const slots: string[] = [];
-    let current = new Date(`${selectedDate}T${availability.startTime}`);
-    const end = new Date(`${selectedDate}T${availability.endTime}`);
+    // Ensure dates are parsed correctly without timezone shifts
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    // Construct times relative to the selected date
+    let current = new Date(y, m - 1, d); // Local time midnight
+    const [startH, startM] = availability.startTime.split(':').map(Number);
+    const [endH, endM] = availability.endTime.split(':').map(Number);
+    
+    current.setHours(startH, startM, 0, 0);
+    const end = new Date(current);
+    end.setHours(endH, endM, 0, 0);
+    
     const duration = availability.slotDurationMinutes;
     const now = new Date();
 
@@ -126,8 +180,9 @@ export const Appointments = () => {
             a.status !== 'Cancelled'
         );
 
-        // Check if time has passed
-        const isPast = current < now;
+        // Check if time has passed (only if selected date is today)
+        const isToday = new Date().toISOString().split('T')[0] === selectedDate;
+        const isPast = isToday && current < now;
 
         if (!isBooked && !isPast) slots.push(timeStr);
         current.setMinutes(current.getMinutes() + duration);
@@ -154,6 +209,7 @@ export const Appointments = () => {
     setAiAnalysis(null);
     setSymptoms('');
     setVisitType('New Visit');
+    showToast('success', 'Appointment confirmed successfully!');
   };
 
   const handleCancelClick = (id: string) => {
@@ -169,18 +225,6 @@ export const Appointments = () => {
     }
   };
 
-  const closeCancelModal = () => {
-    setIsCancelModalOpen(false);
-    setAppointmentToCancel(null);
-  };
-
-  const resetFilters = () => {
-    setFilterStartDate('');
-    setFilterEndDate('');
-    setFilterDoctorId('');
-    setFilterStatus('All');
-  };
-
   // --- Filter Logic ---
   const filteredAppointments = appointments.filter(apt => {
     const matchDoc = filterDoctorId ? apt.doctorId === filterDoctorId : true;
@@ -190,16 +234,14 @@ export const Appointments = () => {
     return matchDoc && matchStatus && matchStart && matchEnd;
   }).sort((a,b) => new Date(`${b.date}T${b.time}`).getTime() - new Date(`${a.date}T${a.time}`).getTime());
 
-  const bookingDoctors = employees.filter(e => e.role === 'Doctor' && e.departmentId === selectedDept);
-  const allDoctors = employees.filter(e => e.role === 'Doctor');
-
   return (
     <div className="space-y-8">
       
       {/* SECTION 1: BOOKING INTERFACE */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        {/* Left Col: AI Triage & Selection */}
-        <div className="xl:col-span-1 space-y-6">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+        
+        {/* Left Col: AI Triage & Configuration (4 Columns) */}
+        <div className="xl:col-span-4 space-y-6">
           
           {/* AI Symptom Checker */}
           <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-6 text-white shadow-lg">
@@ -251,17 +293,20 @@ export const Appointments = () => {
               )}
           </div>
 
-          {/* Booking Form */}
+          {/* Booking Config Form */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
               <h3 className="font-bold text-slate-800 mb-4">Book New Appointment</h3>
               
               <div className="space-y-4">
                   <div>
                       <label className="form-label">Patient</label>
-                      <select className="form-input" value={selectedPatient} onChange={e => setSelectedPatient(e.target.value)}>
-                          <option value="">Select Patient</option>
-                          {patients.map(p => <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>)}
-                      </select>
+                      <div className="relative">
+                        <select className="form-input" value={selectedPatient} onChange={e => setSelectedPatient(e.target.value)}>
+                            <option value="">Select Patient</option>
+                            {patients.map(p => <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>)}
+                        </select>
+                        <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                      </div>
                   </div>
 
                   <div>
@@ -296,70 +341,153 @@ export const Appointments = () => {
                           {bookingDoctors.map(d => <option key={d.id} value={d.id}>{d.firstName} {d.lastName}</option>)}
                       </select>
                   </div>
-
-                  <div>
-                      <label className="form-label">Date</label>
-                      <input 
-                          type="date" 
-                          className="form-input" 
-                          value={selectedDate} 
-                          onChange={e => setSelectedDate(e.target.value)}
-                          min={new Date().toISOString().split('T')[0]}
-                      />
-                  </div>
               </div>
           </div>
         </div>
 
-        {/* Right Col: Slots & Confirmation */}
-        <div className="xl:col-span-2">
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 h-full flex flex-col">
-              <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-                  <h3 className="font-bold text-slate-800 flex items-center">
-                      <Calendar className="w-5 h-5 mr-2 text-blue-600" />
-                      Available Slots
-                  </h3>
-                  {selectedDate && <span className="text-sm font-medium text-slate-500">{new Date(selectedDate).toDateString()}</span>}
-              </div>
+        {/* Right Col: Calendar & Slots (8 Columns) */}
+        <div className="xl:col-span-8 flex flex-col gap-6">
+          
+          {/* CALENDAR CARD */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col md:flex-row h-full">
+              
+              {/* Calendar Section */}
+              <div className="flex-1 p-6 border-r border-slate-100">
+                  <div className="flex items-center justify-between mb-6">
+                      <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
+                          <CalendarIcon className="w-5 h-5 text-blue-600" />
+                          {viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                      </h3>
+                      <div className="flex gap-1">
+                          <button 
+                            onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))}
+                            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"
+                          >
+                              <ChevronLeft className="w-5 h-5" />
+                          </button>
+                          <button 
+                            onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))}
+                            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"
+                          >
+                              <ChevronRight className="w-5 h-5" />
+                          </button>
+                      </div>
+                  </div>
 
-              <div className="p-8 flex-1">
-                  {!selectedDoctor || !selectedDate ? (
-                      <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                          <Clock className="w-12 h-12 mb-4 opacity-20" />
-                          <p>Select a Doctor and Date to view slots</p>
-                      </div>
-                  ) : availableSlots.length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center text-orange-400">
-                          <AlertCircle className="w-12 h-12 mb-4 opacity-50" />
-                          <p>No slots available for this date.</p>
-                      </div>
-                  ) : (
-                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                          {availableSlots.map(slot => (
-                              <button
-                                  key={slot}
-                                  onClick={() => setSelectedSlot(slot)}
-                                  className={`py-2 px-1 rounded-lg text-sm font-medium border transition-all ${
-                                      selectedSlot === slot 
-                                      ? 'bg-blue-600 text-white border-blue-600 ring-2 ring-blue-200' 
-                                      : 'bg-white text-slate-700 border-slate-200 hover:border-blue-400 hover:text-blue-600'
-                                  }`}
-                              >
-                                  {slot}
-                              </button>
+                  {/* Calendar Grid */}
+                  <div>
+                      <div className="grid grid-cols-7 mb-2 text-center">
+                          {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
+                              <div key={d} className="text-xs font-bold text-slate-400 uppercase py-2">{d}</div>
                           ))}
                       </div>
-                  )}
+                      <div className="grid grid-cols-7 gap-2">
+                          {calendarDays.map((date, i) => {
+                              if (!date) return <div key={`empty-${i}`} className="aspect-square" />;
+                              
+                              const isSelected = selectedDate === date.fullDate;
+                              
+                              return (
+                                  <button
+                                      key={date.fullDate}
+                                      disabled={!date.isAvailable}
+                                      onClick={() => {
+                                          setSelectedDate(date.fullDate);
+                                          setSelectedSlot(''); // Reset slot when date changes
+                                      }}
+                                      className={`
+                                          aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all duration-200
+                                          ${isSelected 
+                                              ? 'bg-blue-600 text-white shadow-md shadow-blue-200 ring-2 ring-blue-600 ring-offset-2' 
+                                              : date.isAvailable 
+                                                  ? 'bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50 text-slate-700' 
+                                                  : 'bg-slate-50 text-slate-300 cursor-not-allowed'
+                                          }
+                                      `}
+                                  >
+                                      <span className={`text-sm font-medium ${date.isToday && !isSelected ? 'text-blue-600 font-bold' : ''}`}>
+                                          {date.day}
+                                      </span>
+                                      {date.isAvailable && !isSelected && (
+                                          <span className="w-1 h-1 rounded-full bg-green-400 mt-1"></span>
+                                      )}
+                                  </button>
+                              );
+                          })}
+                      </div>
+                  </div>
+                  
+                  {/* Legend */}
+                  <div className="mt-6 flex items-center gap-4 text-[10px] text-slate-500 justify-center border-t border-slate-50 pt-4">
+                      <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-400"></span> Available</div>
+                      <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-200"></span> Unavailable</div>
+                      <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-600"></span> Selected</div>
+                  </div>
               </div>
 
-              <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
-                  <button 
-                      disabled={!selectedSlot || !selectedPatient}
-                      onClick={handleBooking}
-                      className="bg-blue-600 disabled:bg-slate-300 disabled:cursor-not-allowed hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-blue-200 transition-all transform active:scale-95"
-                  >
-                      Confirm Appointment
-                  </button>
+              {/* Slots Section */}
+              <div className="w-full md:w-80 bg-slate-50 p-6 flex flex-col border-t md:border-t-0 md:border-l border-slate-100">
+                  <div className="mb-4">
+                      <h4 className="font-bold text-slate-800 mb-1">Available Slots</h4>
+                      <p className="text-xs text-slate-500">
+                          {selectedDate 
+                            ? `For ${new Date(selectedDate).toLocaleDateString(undefined, {weekday: 'long', month: 'short', day: 'numeric'})}`
+                            : 'Select a date on the calendar'}
+                      </p>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto min-h-[200px] pr-2 custom-scrollbar">
+                      {!selectedDoctor ? (
+                          <div className="h-full flex flex-col items-center justify-center text-slate-400 text-center">
+                              <User className="w-10 h-10 mb-2 opacity-20" />
+                              <p className="text-sm">Select a Doctor first</p>
+                          </div>
+                      ) : !selectedDate ? (
+                          <div className="h-full flex flex-col items-center justify-center text-slate-400 text-center">
+                              <CalendarIcon className="w-10 h-10 mb-2 opacity-20" />
+                              <p className="text-sm">Pick a date</p>
+                          </div>
+                      ) : availableSlots.length === 0 ? (
+                          <div className="h-full flex flex-col items-center justify-center text-orange-400 text-center p-4 bg-orange-50/50 rounded-xl border border-orange-100">
+                              <AlertCircle className="w-8 h-8 mb-2 opacity-50" />
+                              <p className="text-sm font-medium">No slots available</p>
+                              <p className="text-xs mt-1">Doctor may be off or fully booked.</p>
+                          </div>
+                      ) : (
+                          <div className="grid grid-cols-2 gap-2">
+                              {availableSlots.map(slot => (
+                                  <button
+                                      key={slot}
+                                      onClick={() => setSelectedSlot(slot)}
+                                      className={`
+                                          py-2 px-3 rounded-lg text-sm font-medium border transition-all flex items-center justify-between
+                                          ${selectedSlot === slot 
+                                              ? 'bg-blue-600 text-white border-blue-600 shadow-md' 
+                                              : 'bg-white text-slate-700 border-slate-200 hover:border-blue-400 hover:text-blue-600'
+                                          }
+                                      `}
+                                  >
+                                      <span>{slot}</span>
+                                      {selectedSlot === slot && <Check className="w-3.5 h-3.5" />}
+                                  </button>
+                              ))}
+                          </div>
+                      )}
+                  </div>
+
+                  <div className="mt-6 pt-4 border-t border-slate-200">
+                      <div className="flex justify-between items-center mb-3">
+                          <span className="text-xs font-bold text-slate-500 uppercase">Selected</span>
+                          <span className="text-sm font-bold text-slate-800">{selectedSlot || '--:--'}</span>
+                      </div>
+                      <button 
+                          disabled={!selectedSlot || !selectedPatient}
+                          onClick={handleBooking}
+                          className="w-full bg-blue-600 disabled:bg-slate-300 disabled:cursor-not-allowed hover:bg-blue-700 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-200 transition-all transform active:scale-[0.98] flex items-center justify-center gap-2"
+                      >
+                          Confirm Booking
+                      </button>
+                  </div>
               </div>
           </div>
         </div>
@@ -376,7 +504,7 @@ export const Appointments = () => {
            {/* Filters Toolbar */}
            <div className="flex flex-wrap items-center gap-3">
                <div className="flex items-center bg-white border border-slate-300 rounded-lg px-3 py-1.5 shadow-sm">
-                   <Calendar className="w-4 h-4 text-slate-400 mr-2" />
+                   <CalendarIcon className="w-4 h-4 text-slate-400 mr-2" />
                    <input 
                         type="date" 
                         className="text-sm outline-none text-slate-600 w-32"
@@ -414,7 +542,9 @@ export const Appointments = () => {
                </select>
 
                <button 
-                  onClick={resetFilters}
+                  onClick={() => {
+                      setFilterStartDate(''); setFilterEndDate(''); setFilterDoctorId(''); setFilterStatus('All');
+                  }}
                   className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                   title="Reset Filters"
                >
@@ -533,7 +663,7 @@ export const Appointments = () => {
                   
                   <div className="flex justify-end gap-3">
                       <button 
-                          onClick={closeCancelModal}
+                          onClick={() => { setIsCancelModalOpen(false); setAppointmentToCancel(null); }}
                           className="px-4 py-2 text-slate-600 hover:bg-slate-100 font-medium rounded-lg transition-colors"
                       >
                           No, Keep it
