@@ -27,6 +27,7 @@ export const Billing = () => {
   // --- Create Bill Modal State ---
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [linkedOrderIds, setLinkedOrderIds] = useState<string[]>([]);
   
   // Header / Config State
   const [newBillPatient, setNewBillPatient] = useState('');
@@ -186,7 +187,7 @@ export const Billing = () => {
           payments: []
       };
 
-      const success = await createBill(newBill);
+      const success = await createBill(newBill, linkedOrderIds);
       setIsSaving(false);
 
       if (success) {
@@ -195,7 +196,15 @@ export const Billing = () => {
           setNewBillPatient('');
           setBillItems([{ description: 'Consultation Fee', quantity: 1, unitPrice: 50, total: 50 }]);
           setInvoiceRemarks('');
+          setLinkedOrderIds([]);
       }
+  };
+
+  const handleCloseModal = () => {
+      setShowCreateModal(false);
+      setLinkedOrderIds([]);
+      setNewBillPatient('');
+      setBillItems([{ description: 'Consultation Fee', quantity: 1, unitPrice: 50, total: 50 }]);
   };
 
   // --- Handlers: Payment ---
@@ -606,8 +615,14 @@ export const Billing = () => {
                                               <button 
                                                 className="text-blue-600 hover:underline font-bold"
                                                 onClick={() => {
-                                                    // Pre-fill creation modal
                                                     setNewBillPatient(patient?.id || '');
+                                                    setLinkedOrderIds([order.id]); // Link this specific order
+                                                    setBillItems([{
+                                                        description: order.serviceName,
+                                                        quantity: order.quantity,
+                                                        unitPrice: order.unitPrice,
+                                                        total: order.totalPrice
+                                                    }]);
                                                     setShowCreateModal(true);
                                                 }}
                                               >
@@ -704,7 +719,7 @@ export const Billing = () => {
                               </div>
                           </div>
                       </div>
-                      <button onClick={() => setShowCreateModal(false)} className="text-blue-200 hover:text-white hover:bg-blue-700 p-1 rounded-full transition-colors">
+                      <button onClick={handleCloseModal} className="text-blue-200 hover:text-white hover:bg-blue-700 p-1 rounded-full transition-colors">
                           <X className="w-6 h-6" />
                       </button>
                   </div>
@@ -957,7 +972,7 @@ export const Billing = () => {
                                   Export
                               </button>
                               
-                              <button onClick={() => setShowCreateModal(false)} className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded text-xs font-bold shadow-md transition-colors flex items-center gap-1">
+                              <button onClick={handleCloseModal} className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded text-xs font-bold shadow-md transition-colors flex items-center gap-1">
                                   <ArrowLeft className="w-3.5 h-3.5" /> Back
                               </button>
                               

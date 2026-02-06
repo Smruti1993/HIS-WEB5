@@ -52,7 +52,7 @@ interface DataContextType {
   cancelAppointment: (id: string) => void;
 
   bills: Bill[];
-  createBill: (bill: Bill) => Promise<boolean>;
+  createBill: (bill: Bill, linkedOrderIds?: string[]) => Promise<boolean>;
   cancelBill: (id: string) => Promise<boolean>;
   addPayment: (payment: Payment, billId: string) => void;
 
@@ -140,7 +140,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   });
   const mapAvailToDb = (a: any) => ({
     id: a.id, doctor_id: a.doctorId, day_of_week: a.dayOfWeek, start_time: a.startTime,
-    end_time: a.endTime, slot_duration_minutes: a.slotDurationMinutes
+    end_time: a.endTime, slot_duration_minutes: a.slot_duration_minutes
   });
 
   const mapAptFromDb = (a: any): Appointment => ({
@@ -707,7 +707,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     else showToast('success', 'Appointment cancelled.');
   };
 
-  const createBill = async (bill: Bill): Promise<boolean> => {
+  const createBill = async (bill: Bill, linkedOrderIds?: string[]): Promise<boolean> => {
       if (!requireDb()) return false;
       
       // Optimistic update
@@ -745,6 +745,24 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           // Optional: Delete the bill if items failed? For now, keep it as it might be manually fixable or retryable logic could be added.
           return false;
       } 
+
+      // NEW: Update status of linked service orders
+      if (linkedOrderIds && linkedOrderIds.length > 0) {
+          const { error: orderError } = await getSupabase()
+              .from('service_orders')
+              .update({ billing_status: 'Invoiced' })
+              .in('id', linkedOrderIds);
+          
+          if (orderError) {
+              console.error("Failed to update order status", orderError);
+              showToast('info', 'Bill created, but failed to update order status.');
+          } else {
+              // Update local state for immediate UI reflection
+              setServiceOrders(prev => prev.map(o => 
+                  linkedOrderIds.includes(o.id) ? { ...o, billingStatus: 'Invoiced' } : o
+              ));
+          }
+      }
       
       showToast('success', 'Invoice generated successfully.');
       return true;
