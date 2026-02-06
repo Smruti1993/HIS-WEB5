@@ -1,14 +1,28 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
-import { Plus, Search, Printer, DollarSign, FileText, Trash2, X, History, CreditCard, Package, Pill, Stethoscope, Save, ArrowLeft, MoreHorizontal, CheckSquare, Square, Loader2, Ban, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Printer, DollarSign, FileText, Trash2, X, History, CreditCard, Package, Pill, Stethoscope, Save, ArrowLeft, MoreHorizontal, CheckSquare, Square, Loader2, Ban, AlertTriangle, Filter, ChevronDown, Download } from 'lucide-react';
 import { Bill, BillItem, Payment, ServiceDefinition } from '../types';
 
 export const Billing = () => {
-  const { bills, createBill, cancelBill, addPayment, patients, appointments, showToast, serviceDefinitions, serviceTariffs } = useData();
+  const { bills, createBill, cancelBill, addPayment, patients, appointments, showToast, serviceDefinitions, serviceTariffs, serviceOrders, employees, departments } = useData();
   
-  // --- List View State ---
+  // --- Tabs State ---
+  const [activeTab, setActiveTab] = useState('Invoice List');
+
+  // --- Invoice List View State ---
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+
+  // --- Pending Invoice List State ---
+  const [pendingFilters, setPendingFilters] = useState({
+      mrNo: '',
+      fromDate: new Date().toISOString().split('T')[0],
+      toDate: new Date().toISOString().split('T')[0],
+      visitType: '',
+      consultant: '',
+      department: ''
+  });
 
   // --- Create Bill Modal State ---
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -44,13 +58,33 @@ export const Billing = () => {
   // --- Cancel Modal State ---
   const [billToCancel, setBillToCancel] = useState<string | null>(null);
 
-  // --- Derived Data ---
+  // --- Derived Data: Invoice List ---
   const filteredBills = bills.filter(b => {
       const p = patients.find(pat => pat.id === b.patientId);
       const nameMatch = p ? `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) : false;
       const statusMatch = statusFilter === 'All' || b.status === statusFilter;
       return nameMatch && statusMatch;
   }).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  // --- Derived Data: Pending Invoices ---
+  const pendingInvoices = serviceOrders.filter(order => {
+      if (order.billingStatus !== 'Pending') return false;
+      
+      const apt = appointments.find(a => a.id === order.appointmentId);
+      const patient = patients.find(p => p.id === apt?.patientId);
+      const doctor = employees.find(e => e.id === order.orderingDoctorId);
+      const dept = departments.find(d => d.id === (doctor?.departmentId || apt?.departmentId));
+
+      // Filters
+      if (pendingFilters.mrNo && !patient?.id.includes(pendingFilters.mrNo)) return false;
+      if (pendingFilters.consultant && !doctor?.lastName.toLowerCase().includes(pendingFilters.consultant.toLowerCase())) return false;
+      if (pendingFilters.department && !dept?.name.toLowerCase().includes(pendingFilters.department.toLowerCase())) return false;
+      
+      const oDate = order.orderDate.split('T')[0];
+      if (oDate < pendingFilters.fromDate || oDate > pendingFilters.toDate) return false;
+
+      return true;
+  });
 
   // Derived Totals
   const patientGrossAmount = billItems.reduce((acc, item) => acc + item.total, 0);
@@ -305,126 +339,290 @@ export const Billing = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-           <h2 className="text-2xl font-bold text-slate-800">Billing & Invoices</h2>
-           <p className="text-slate-500 text-sm">Manage patient invoices and payments</p>
-        </div>
-        <button 
-          onClick={() => setShowCreateModal(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition-colors w-fit"
-        >
-          <Plus className="w-4 h-4" /> New Invoice
-        </button>
+    <div className="space-y-4">
+      
+      {/* Top Tabs */}
+      <div className="flex gap-1 border-b border-slate-200">
+          {['Invoice List', 'Pending Invoice List', 'Credit Memo'].map(tab => (
+              <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-2 text-sm font-medium border-t border-x rounded-t-lg transition-colors relative top-[1px] ${
+                      activeTab === tab 
+                      ? 'bg-white border-slate-200 text-slate-800 border-b-transparent' 
+                      : 'bg-slate-100 border-transparent text-slate-500 hover:bg-slate-200'
+                  }`}
+              >
+                  {tab}
+              </button>
+          ))}
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200">
-        {/* Filters */}
-        <div className="p-4 border-b border-slate-100 flex flex-wrap items-center gap-4 bg-slate-50/50">
-           <div className="relative max-w-xs flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                <input 
-                    className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
-                    placeholder="Search patient..."
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                />
+      {activeTab === 'Invoice List' && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                <h2 className="text-2xl font-bold text-slate-800">Billing & Invoices</h2>
+                <p className="text-slate-500 text-sm">Manage patient invoices and payments</p>
+                </div>
+                <button 
+                onClick={() => setShowCreateModal(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition-colors w-fit"
+                >
+                <Plus className="w-4 h-4" /> New Invoice
+                </button>
             </div>
-            <select 
-                className="bg-white border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 outline-none"
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
-            >
-                <option value="All">All Status</option>
-                <option value="Unpaid">Unpaid</option>
-                <option value="Partial">Partial</option>
-                <option value="Paid">Paid</option>
-                <option value="Cancelled">Cancelled</option>
-            </select>
-        </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 text-slate-500">
-                    <tr>
-                        <th className="px-6 py-3 font-semibold">Invoice ID</th>
-                        <th className="px-6 py-3 font-semibold">Date</th>
-                        <th className="px-6 py-3 font-semibold">Patient</th>
-                        <th className="px-6 py-3 font-semibold">Amount</th>
-                        <th className="px-6 py-3 font-semibold">Paid</th>
-                        <th className="px-6 py-3 font-semibold">Status</th>
-                        <th className="px-6 py-3 font-semibold text-right">Actions</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                    {filteredBills.length === 0 ? (
-                        <tr>
-                            <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
-                                <FileText className="w-12 h-12 mx-auto mb-2 opacity-20" />
-                                No invoices found
-                            </td>
-                        </tr>
-                    ) : (
-                        filteredBills.map(bill => {
-                            const patient = patients.find(p => p.id === bill.patientId);
-                            return (
-                                <tr key={bill.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-6 py-4 font-mono text-xs text-slate-500">#{bill.id.slice(-6)}</td>
-                                    <td className="px-6 py-4">{new Date(bill.date).toLocaleDateString()}</td>
-                                    <td className="px-6 py-4 font-medium text-slate-900">{patient?.firstName} {patient?.lastName}</td>
-                                    <td className="px-6 py-4 font-medium text-slate-900">${bill.totalAmount.toFixed(2)}</td>
-                                    <td className="px-6 py-4 text-green-600">${bill.paidAmount.toFixed(2)}</td>
-                                    <td className="px-6 py-4">
-                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                            bill.status === 'Paid' ? 'bg-green-100 text-green-800' :
-                                            bill.status === 'Partial' ? 'bg-orange-100 text-orange-800' :
-                                            bill.status === 'Cancelled' ? 'bg-slate-100 text-slate-500 line-through' :
-                                            'bg-red-100 text-red-800'
-                                        }`}>
-                                            {bill.status}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <div className="flex justify-end gap-2">
-                                            {bill.status !== 'Paid' && bill.status !== 'Cancelled' && (
-                                                <button 
-                                                    onClick={() => openPaymentModal(bill)}
-                                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                    title="Record Payment"
-                                                >
-                                                    <DollarSign className="w-4 h-4" />
-                                                </button>
-                                            )}
-                                            
-                                            {bill.status !== 'Cancelled' && (
-                                                <button
-                                                    onClick={() => setBillToCancel(bill.id)}
-                                                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                    title="Cancel Invoice"
-                                                >
-                                                    <Ban className="w-4 h-4" />
-                                                </button>
-                                            )}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200">
+                {/* Filters */}
+                <div className="p-4 border-b border-slate-100 flex flex-wrap items-center gap-4 bg-slate-50/50">
+                <div className="relative max-w-xs flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                        <input 
+                            className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                            placeholder="Search patient..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    <select 
+                        className="bg-white border border-slate-300 text-slate-600 text-sm rounded-lg px-3 py-2 outline-none"
+                        value={statusFilter}
+                        onChange={e => setStatusFilter(e.target.value)}
+                    >
+                        <option value="All">All Status</option>
+                        <option value="Unpaid">Unpaid</option>
+                        <option value="Partial">Partial</option>
+                        <option value="Paid">Paid</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                </div>
 
-                                            <button 
-                                                onClick={() => handlePrint(bill)}
-                                                className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
-                                                title="Print Invoice"
-                                            >
-                                                <Printer className="w-4 h-4" />
-                                            </button>
-                                        </div>
+                {/* Table */}
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-slate-50 text-slate-500">
+                            <tr>
+                                <th className="px-6 py-3 font-semibold">Invoice ID</th>
+                                <th className="px-6 py-3 font-semibold">Date</th>
+                                <th className="px-6 py-3 font-semibold">Patient</th>
+                                <th className="px-6 py-3 font-semibold">Amount</th>
+                                <th className="px-6 py-3 font-semibold">Paid</th>
+                                <th className="px-6 py-3 font-semibold">Status</th>
+                                <th className="px-6 py-3 font-semibold text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {filteredBills.length === 0 ? (
+                                <tr>
+                                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                                        <FileText className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                                        No invoices found
                                     </td>
                                 </tr>
-                            );
-                        })
-                    )}
-                </tbody>
-            </table>
-        </div>
-      </div>
+                            ) : (
+                                filteredBills.map(bill => {
+                                    const patient = patients.find(p => p.id === bill.patientId);
+                                    return (
+                                        <tr key={bill.id} className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-6 py-4 font-mono text-xs text-slate-500">#{bill.id.slice(-6)}</td>
+                                            <td className="px-6 py-4">{new Date(bill.date).toLocaleDateString()}</td>
+                                            <td className="px-6 py-4 font-medium text-slate-900">{patient?.firstName} {patient?.lastName}</td>
+                                            <td className="px-6 py-4 font-medium text-slate-900">${bill.totalAmount.toFixed(2)}</td>
+                                            <td className="px-6 py-4 text-green-600">${bill.paidAmount.toFixed(2)}</td>
+                                            <td className="px-6 py-4">
+                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                                    bill.status === 'Paid' ? 'bg-green-100 text-green-800' :
+                                                    bill.status === 'Partial' ? 'bg-orange-100 text-orange-800' :
+                                                    bill.status === 'Cancelled' ? 'bg-slate-100 text-slate-500 line-through' :
+                                                    'bg-red-100 text-red-800'
+                                                }`}>
+                                                    {bill.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="flex justify-end gap-2">
+                                                    {bill.status !== 'Paid' && bill.status !== 'Cancelled' && (
+                                                        <button 
+                                                            onClick={() => openPaymentModal(bill)}
+                                                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                            title="Record Payment"
+                                                        >
+                                                            <DollarSign className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                    
+                                                    {bill.status !== 'Cancelled' && (
+                                                        <button
+                                                            onClick={() => setBillToCancel(bill.id)}
+                                                            className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                            title="Cancel Invoice"
+                                                        >
+                                                            <Ban className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+
+                                                    <button 
+                                                        onClick={() => handlePrint(bill)}
+                                                        className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+                                                        title="Print Invoice"
+                                                    >
+                                                        <Printer className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+          </div>
+      )}
+
+      {activeTab === 'Pending Invoice List' && (
+          <div className="bg-white rounded-lg shadow-sm border border-slate-200 animate-in fade-in duration-300">
+              {/* Filters */}
+              <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+                  <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-slate-600">
+                      <div className="flex items-center gap-2">
+                          <span>MR No:</span>
+                          <input 
+                            className="border border-slate-300 rounded px-2 py-1 w-24 outline-none focus:border-blue-500 bg-white" 
+                            value={pendingFilters.mrNo}
+                            onChange={e => setPendingFilters({...pendingFilters, mrNo: e.target.value})}
+                          />
+                      </div>
+                      <div className="flex items-center gap-2">
+                          <span>From Date:</span>
+                          <input 
+                            type="date" 
+                            className="border border-slate-300 rounded px-2 py-1 outline-none focus:border-blue-500 bg-white" 
+                            value={pendingFilters.fromDate}
+                            onChange={e => setPendingFilters({...pendingFilters, fromDate: e.target.value})}
+                          />
+                      </div>
+                      <div className="flex items-center gap-2">
+                          <span>To Date:</span>
+                          <input 
+                            type="date" 
+                            className="border border-slate-300 rounded px-2 py-1 outline-none focus:border-blue-500 bg-white"
+                            value={pendingFilters.toDate}
+                            onChange={e => setPendingFilters({...pendingFilters, toDate: e.target.value})}
+                          />
+                      </div>
+                      <div className="flex items-center gap-2">
+                          <span>Visit Type:</span>
+                          <select 
+                            className="border border-slate-300 rounded px-2 py-1 outline-none focus:border-blue-500 bg-white w-28"
+                            value={pendingFilters.visitType}
+                            onChange={e => setPendingFilters({...pendingFilters, visitType: e.target.value})}
+                          >
+                              <option value="">-- Select --</option>
+                              <option value="New Visit">New Visit</option>
+                              <option value="Follow-up">Follow-up</option>
+                          </select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                          <span>Consultant:</span>
+                          <div className="relative">
+                              <input 
+                                className="border border-slate-300 rounded px-2 py-1 pr-7 w-32 outline-none focus:border-blue-500 bg-white"
+                                value={pendingFilters.consultant}
+                                onChange={e => setPendingFilters({...pendingFilters, consultant: e.target.value})}
+                              />
+                              <Search className="w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                          </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                          <span>Department:</span>
+                          <div className="relative">
+                              <input 
+                                className="border border-slate-300 rounded px-2 py-1 pr-7 w-32 outline-none focus:border-blue-500 bg-white"
+                                value={pendingFilters.department}
+                                onChange={e => setPendingFilters({...pendingFilters, department: e.target.value})}
+                              />
+                              <Search className="w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                          </div>
+                      </div>
+                      <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 rounded shadow-sm">Search</button>
+                  </div>
+                  
+                  <div className="mt-4 flex gap-2">
+                      <button className="bg-blue-500 hover:bg-blue-600 text-white text-xs px-3 py-1.5 rounded shadow-sm font-bold">Excel</button>
+                      <button 
+                        className="bg-blue-500 hover:bg-blue-600 text-white text-xs px-3 py-1.5 rounded shadow-sm font-bold flex items-center gap-1"
+                        onClick={() => setShowCreateModal(true)}
+                      >
+                          New <ChevronDown className="w-3 h-3" />
+                      </button>
+                  </div>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto min-h-[400px] border-t border-slate-200">
+                  <div className="bg-gradient-to-b from-blue-400 to-blue-500 text-white text-xs font-bold px-4 py-2 border-b border-blue-600 flex items-center gap-2">
+                      <span>Pending Invoice</span>
+                  </div>
+                  <table className="w-full text-xs text-left border-collapse">
+                      <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-300">
+                          <tr>
+                              <th className="p-2 border-r border-slate-200">MRNO</th>
+                              <th className="p-2 border-r border-slate-200">Encounter Date</th>
+                              <th className="p-2 border-r border-slate-200">Visit No</th>
+                              <th className="p-2 border-r border-slate-200">Consultant</th>
+                              <th className="p-2 border-r border-slate-200">Department</th>
+                              <th className="p-2 border-r border-slate-200">Service Approval</th>
+                              <th className="p-2 border-r border-slate-200">Sponsor</th>
+                              <th className="p-2 border-r border-slate-200">Order No</th>
+                              <th className="p-2">Action</th>
+                          </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                          {pendingInvoices.length === 0 ? (
+                              <tr>
+                                  <td colSpan={9} className="p-12 text-center text-slate-400 italic">No pending orders found.</td>
+                              </tr>
+                          ) : (
+                              pendingInvoices.map((order, idx) => {
+                                  const apt = appointments.find(a => a.id === order.appointmentId);
+                                  const patient = patients.find(p => p.id === apt?.patientId);
+                                  const doctor = employees.find(e => e.id === order.orderingDoctorId);
+                                  const dept = departments.find(d => d.id === (doctor?.departmentId || apt?.departmentId));
+                                  
+                                  return (
+                                      <tr key={idx} className="hover:bg-blue-50 transition-colors">
+                                          <td className="p-2 border-r border-slate-200 font-medium">{patient?.id.slice(-8).toUpperCase()}</td>
+                                          <td className="p-2 border-r border-slate-200">{new Date(order.orderDate).toLocaleString()}</td>
+                                          <td className="p-2 border-r border-slate-200 text-slate-500">{apt?.id.slice(-6)}</td>
+                                          <td className="p-2 border-r border-slate-200">Dr. {doctor?.lastName || '-'}</td>
+                                          <td className="p-2 border-r border-slate-200">{dept?.name || '-'}</td>
+                                          <td className="p-2 border-r border-slate-200 text-green-600 font-bold">Approved</td>
+                                          <td className="p-2 border-r border-slate-200">Self Pay</td>
+                                          <td className="p-2 border-r border-slate-200 font-mono">{order.id.slice(-8)}</td>
+                                          <td className="p-2">
+                                              <button 
+                                                className="text-blue-600 hover:underline font-bold"
+                                                onClick={() => {
+                                                    // Pre-fill creation modal
+                                                    setNewBillPatient(patient?.id || '');
+                                                    setShowCreateModal(true);
+                                                }}
+                                              >
+                                                  Invoice
+                                              </button>
+                                          </td>
+                                      </tr>
+                                  );
+                              })
+                          )}
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+      )}
 
       {/* CANCEL CONFIRMATION MODAL */}
       {billToCancel && (
