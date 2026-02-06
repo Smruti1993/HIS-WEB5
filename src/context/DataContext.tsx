@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { 
   Patient, Employee, Department, Unit, ServiceCentre, 
@@ -894,7 +893,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { error } = await getSupabase().from('service_orders').insert(dbPayload);
       if (error) {
           showToast('error', `Failed to save orders: ${error.message}`);
-          setServiceOrders(prev => prev.filter(p => !orders.find(o => o.id === p.id))); // revert
+          // Fix: use Set to safely check IDs and avoid type errors
+          const orderIds = new Set(orders.map(o => o.id));
+          setServiceOrders(prev => prev.filter(p => !orderIds.has(p.id))); 
       } else {
           showToast('success', `${orders.length} service(s) ordered.`);
       }

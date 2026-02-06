@@ -15,20 +15,20 @@ import { Consultation } from './pages/Consultation';
 import { Reports } from './pages/Reports';
 import { Login } from './pages/Login';
 
-const PrivateRoute = ({ children }: { children: React.ReactElement }) => {
+const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
     const { user, isDbConnected } = useData();
     const location = useLocation();
 
     // Allow access to Connection page even if not logged in, but strictly enforce login for others
     if (location.pathname === '/connection') {
-        return children;
+        return <>{children}</>;
     }
 
     if (!user) {
         return <Navigate to="/login" replace state={{ from: location }} />;
     }
 
-    return children;
+    return <>{children}</>;
 };
 
 const AppRoutes = () => {
