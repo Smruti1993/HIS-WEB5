@@ -464,11 +464,6 @@ export const Appointments = () => {
       
       const endTime = new Date(selectedDateObj);
       endTime.setHours(endHour, 0, 0, 0);
-      // Handle midnight wrap if endHour is 24
-      if (endHour === 24) {
-          endTime.setDate(endTime.getDate() + 1);
-          endTime.setHours(0, 0, 0, 0);
-      }
 
       while(current < endTime) {
           const timeStr = current.toTimeString().substring(0, 5);
@@ -719,7 +714,7 @@ export const Appointments = () => {
                     <div className="flex-1 overflow-y-auto bg-white custom-scrollbar">
                         {selectedDoctor && schedulerData ? (
                             schedulerData.slots.map((slot, idx) => (
-                                <div key={idx} className="flex h-8 border-b border-slate-200 hover:bg-slate-50 transition-colors">
+                                <div key={slot.time} className="flex h-8 border-b border-slate-200 hover:bg-slate-50 transition-colors">
                                     <div className="w-16 border-r border-slate-300 bg-slate-50 flex items-center justify-center text-[10px] font-bold text-slate-500 select-none shrink-0">
                                         {slot.time}
                                     </div>
