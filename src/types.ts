@@ -87,6 +87,7 @@ export interface ServiceOrder {
   orderingDoctorId: string;
   instructions?: string;
   serviceCenter?: string;
+  toothNumbers?: string; // New field for Dental
 }
 
 export enum EmployeeRole {
