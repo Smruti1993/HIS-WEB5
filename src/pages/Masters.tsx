@@ -164,10 +164,9 @@ const DiagnosisMaster = () => {
                 <div className="flex gap-2 w-full md:w-auto justify-end">
                     <button 
                         onClick={() => downloadTemplate('diagnosis')}
-                        className="p-2 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg border border-slate-200 transition-colors"
-                        title="Download Template"
+                        className="flex items-center gap-2 px-3 py-2 bg-white text-slate-700 rounded-lg border border-slate-300 hover:bg-slate-50 hover:text-blue-600 transition-colors text-xs font-bold"
                     >
-                        <FileDown className="w-5 h-5" />
+                        <FileDown className="w-4 h-4" /> Download Template
                     </button>
                     <input 
                         type="file" 
@@ -178,7 +177,7 @@ const DiagnosisMaster = () => {
                     />
                     <button 
                         onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors"
+                        className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm transition-colors"
                         disabled={isLoading}
                     >
                         <FileSpreadsheet className="w-4 h-4" /> Import Excel
@@ -220,7 +219,7 @@ const DiagnosisMaster = () => {
 
 // --- Service Master Component ---
 const ServiceMaster = () => {
-    const { serviceDefinitions, saveServiceDefinition, uploadServiceDefinitions, isLoading } = useData();
+    const { serviceDefinitions, serviceTariffs, saveServiceDefinition, uploadServiceDefinitions, isLoading } = useData();
     const [showForm, setShowForm] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -256,9 +255,10 @@ const ServiceMaster = () => {
 
     const handleEdit = (s: ServiceDefinition) => {
         setForm(s);
-        // Extract price from tariffs if available
-        if (s.tariffs && s.tariffs.length > 0) {
-            setPrice(s.tariffs[0].price.toString());
+        // Extract price from separate tariff list
+        const tariff = serviceTariffs.find(t => t.serviceId === s.id);
+        if (tariff) {
+            setPrice(tariff.price.toString());
         } else {
             setPrice('');
         }
@@ -365,10 +365,9 @@ const ServiceMaster = () => {
                     <div className="flex gap-2 w-full md:w-auto justify-end">
                         <button 
                             onClick={() => downloadTemplate('service')}
-                            className="p-2 bg-white text-slate-600 rounded-lg border border-slate-200 hover:bg-slate-50 hover:text-blue-600 transition-colors"
-                            title="Download Template"
+                            className="flex items-center gap-2 px-3 py-2 bg-white text-slate-700 rounded-lg border border-slate-300 hover:bg-slate-50 hover:text-blue-600 transition-colors text-xs font-bold"
                         >
-                            <FileDown className="w-5 h-5" />
+                            <FileDown className="w-4 h-4" /> Download Template
                         </button>
                         <input 
                             type="file" 
@@ -379,15 +378,14 @@ const ServiceMaster = () => {
                         />
                         <button 
                             onClick={() => fileInputRef.current?.click()}
-                            className="p-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
-                            title="Import Excel"
+                            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm transition-colors"
                             disabled={isLoading}
                         >
-                            <FileSpreadsheet className="w-5 h-5" />
+                            <FileSpreadsheet className="w-4 h-4" /> Import Excel
                         </button>
                         <button 
                             onClick={() => { setForm(initialForm); setPrice(''); setShowForm(true); }}
-                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors"
+                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm transition-colors"
                         >
                             <Plus className="w-4 h-4" /> Add Service
                         </button>
@@ -405,17 +403,22 @@ const ServiceMaster = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {filtered.map((s, i) => (
+                            {filtered.map((s, i) => {
+                                // Find price from tariffs list
+                                const tariff = serviceTariffs.find(t => t.serviceId === s.id);
+                                const displayPrice = tariff ? tariff.price.toFixed(2) : '-';
+
+                                return (
                                 <tr key={i} onClick={() => handleEdit(s)} className="hover:bg-blue-50 cursor-pointer transition-colors">
                                     <td className="px-6 py-2 font-mono font-bold text-blue-700">{s.code}</td>
                                     <td className="px-6 py-2 font-medium text-slate-800">{s.name}</td>
                                     <td className="px-6 py-2 text-slate-600">{s.serviceCategory}</td>
                                     <td className="px-6 py-2 text-slate-500">{s.serviceType}</td>
-                                    <td className="px-6 py-2 text-right font-mono">
-                                        {s.tariffs && s.tariffs.length > 0 ? s.tariffs[0].price.toFixed(2) : '-'}
+                                    <td className="px-6 py-2 text-right font-mono font-bold text-green-700">
+                                        {displayPrice}
                                     </td>
                                 </tr>
-                            ))}
+                            )})}
                         </tbody>
                     </table>
                 </div>
@@ -537,9 +540,9 @@ export const Masters = () => {
   const tabs = [
     { id: 'departments', label: 'Departments' },
     { id: 'units', label: 'Medical Units' },
-    { id: 'services', label: 'Service Centres' },
+    { id: 'services', label: 'Service Locations' }, // Renamed from Service Centres to clarify
     { id: 'diagnosis', label: 'Diagnosis (ICD)' },
-    { id: 'service_defs', label: 'Service Definitions' },
+    { id: 'service_defs', label: 'Service Master' }, // Renamed from Service Definitions to clarify
   ];
 
   return (
@@ -568,7 +571,7 @@ export const Masters = () => {
           <MasterList title="Medical Unit" data={units} onAdd={addUnit} />
         )}
         {activeTab === 'services' && (
-          <MasterList title="Service Centre" data={serviceCentres} onAdd={addServiceCentre} />
+          <MasterList title="Service Location" data={serviceCentres} onAdd={addServiceCentre} />
         )}
         {activeTab === 'diagnosis' && (
             <DiagnosisMaster />
