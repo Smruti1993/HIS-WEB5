@@ -287,10 +287,10 @@ const ServiceMaster = () => {
                 name: row['Name'] || '',
                 serviceType: row['Type'] || 'Single service',
                 serviceCategory: row['Category'] || 'General',
-                status: 'Active',
+                status: 'Active' as const,
                 chargeable: true,
-                applicableVisitType: 'Both',
-                applicableGender: 'Both',
+                applicableVisitType: 'Both' as const,
+                applicableGender: 'Both' as const,
                 schedulable: !!row['Schedulable'],
                 surgicalService: !!row['Surgical'],
                 individuallyOrderable: true,
@@ -307,7 +307,7 @@ const ServiceMaster = () => {
                     tariffName: 'Self Pay',
                     price: parseFloat(row['Price']) || 0,
                     effectiveDate: new Date().toISOString(),
-                    status: 'Active'
+                    status: 'Active' as const
                 }]
             })).filter(s => s.code && s.name);
 
