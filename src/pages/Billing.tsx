@@ -451,13 +451,17 @@ export const Billing = () => {
                                             </td>
                                             <td className="px-6 py-4 text-right">
                                                 <div className="flex justify-end gap-2">
-                                                    {bill.status !== 'Paid' && bill.status !== 'Cancelled' && (
+                                                    {bill.status !== 'Cancelled' && (
                                                         <button 
                                                             onClick={() => openPaymentModal(bill)}
-                                                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                            title="Record Payment"
+                                                            className={`p-2 rounded-lg transition-colors ${
+                                                                bill.status === 'Paid' 
+                                                                ? 'text-slate-500 hover:bg-slate-100' 
+                                                                : 'text-blue-600 hover:bg-blue-50'
+                                                            }`}
+                                                            title={bill.status === 'Paid' ? "View Payment History" : "Record Payment"}
                                                         >
-                                                            <DollarSign className="w-4 h-4" />
+                                                            {bill.status === 'Paid' ? <History className="w-4 h-4" /> : <DollarSign className="w-4 h-4" />}
                                                         </button>
                                                     )}
                                                     
@@ -989,15 +993,17 @@ export const Billing = () => {
           </div>
       )}
 
-      {/* PAYMENT MODAL (Existing Code, slightly cleaned up for context) */}
+      {/* PAYMENT MODAL */}
       {showPaymentModal && selectedBill && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
               <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 m-4">
-                  <h3 className="text-lg font-bold text-slate-800 mb-1">Record Payment</h3>
+                  <h3 className="text-lg font-bold text-slate-800 mb-1">
+                      {selectedBill.status === 'Paid' ? 'Payment History' : 'Record Payment'}
+                  </h3>
                   <p className="text-sm text-slate-500 mb-4">Invoice #{selectedBill.id.slice(-6)} • Total: ${selectedBill.totalAmount.toFixed(2)}</p>
 
                   {/* Payment History Section */}
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-5 max-h-40 overflow-y-auto">
+                  <div className={`bg-slate-50 p-4 rounded-xl border border-slate-100 mb-5 overflow-y-auto ${selectedBill.status === 'Paid' ? 'max-h-[60vh]' : 'max-h-40'}`}>
                     <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3 flex items-center">
                         <History className="w-3.5 h-3.5 mr-1.5" /> Payment History
                     </h4>
@@ -1023,66 +1029,81 @@ export const Billing = () => {
                     )}
                   </div>
 
-                  <form onSubmit={handleRecordPayment} className="space-y-4 border-t border-slate-100 pt-4">
-                      <div>
-                          <label className="form-label">Payment Amount</label>
-                          <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+                  {/* Hide form if bill is fully paid or cancelled */}
+                  {selectedBill.status !== 'Paid' && selectedBill.status !== 'Cancelled' && (
+                      <form onSubmit={handleRecordPayment} className="space-y-4 border-t border-slate-100 pt-4">
+                          <div>
+                              <label className="form-label">Payment Amount</label>
+                              <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+                                  <input 
+                                      type="number" step="0.01"
+                                      className={`form-input pl-8 font-medium ${amountError ? 'border-red-500 focus:ring-red-200' : ''}`}
+                                      value={paymentAmount}
+                                      onChange={handleAmountChange}
+                                  />
+                              </div>
+                              {amountError ? (
+                                  <p className="text-xs text-red-500 mt-1 font-medium">{amountError}</p>
+                              ) : (
+                                  <p className="text-xs text-slate-500 mt-1">Remaining Balance: ${(selectedBill.totalAmount - selectedBill.paidAmount).toFixed(2)}</p>
+                              )}
+                          </div>
+
+                          <div>
+                              <label className="form-label">Payment Method</label>
+                              <select 
+                                  className="form-input"
+                                  value={paymentMethod}
+                                  onChange={e => setPaymentMethod(e.target.value)}
+                              >
+                                  <option>Cash</option>
+                                  <option>Card</option>
+                                  <option>Insurance</option>
+                                  <option>Online</option>
+                              </select>
+                          </div>
+
+                          <div>
+                              <label className="form-label">Reference / Note (Optional)</label>
                               <input 
-                                  type="number" step="0.01"
-                                  className={`form-input pl-8 font-medium ${amountError ? 'border-red-500 focus:ring-red-200' : ''}`}
-                                  value={paymentAmount}
-                                  onChange={handleAmountChange}
+                                  className="form-input"
+                                  placeholder="e.g. Transaction ID"
+                                  value={paymentRef}
+                                  onChange={e => setPaymentRef(e.target.value)}
                               />
                           </div>
-                          {amountError ? (
-                              <p className="text-xs text-red-500 mt-1 font-medium">{amountError}</p>
-                          ) : (
-                              <p className="text-xs text-slate-500 mt-1">Remaining Balance: ${(selectedBill.totalAmount - selectedBill.paidAmount).toFixed(2)}</p>
-                          )}
-                      </div>
 
-                      <div>
-                          <label className="form-label">Payment Method</label>
-                          <select 
-                              className="form-input"
-                              value={paymentMethod}
-                              onChange={e => setPaymentMethod(e.target.value)}
-                          >
-                              <option>Cash</option>
-                              <option>Card</option>
-                              <option>Insurance</option>
-                              <option>Online</option>
-                          </select>
-                      </div>
-
-                      <div>
-                          <label className="form-label">Reference / Note (Optional)</label>
-                          <input 
-                              className="form-input"
-                              placeholder="e.g. Transaction ID"
-                              value={paymentRef}
-                              onChange={e => setPaymentRef(e.target.value)}
-                          />
-                      </div>
-
-                      <div className="flex gap-3 pt-4">
-                          <button 
-                              type="button" 
+                          <div className="flex gap-3 pt-4">
+                              <button 
+                                  type="button" 
+                                  onClick={() => setShowPaymentModal(false)}
+                                  className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-600 font-medium hover:bg-slate-50 transition-colors"
+                              >
+                                  Cancel
+                              </button>
+                              <button 
+                                  type="submit" 
+                                  disabled={!!amountError || !paymentAmount}
+                                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 shadow-md shadow-green-200 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed disabled:shadow-none"
+                              >
+                                  Confirm Payment
+                              </button>
+                          </div>
+                      </form>
+                  )}
+                  
+                  {/* Show simple close button if form is hidden */}
+                  {(selectedBill.status === 'Paid' || selectedBill.status === 'Cancelled') && (
+                       <div className="border-t border-slate-100 pt-4 flex justify-end">
+                           <button 
                               onClick={() => setShowPaymentModal(false)}
-                              className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-600 font-medium hover:bg-slate-50 transition-colors"
-                          >
-                              Cancel
-                          </button>
-                          <button 
-                              type="submit" 
-                              disabled={!!amountError || !paymentAmount}
-                              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 shadow-md shadow-green-200 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed disabled:shadow-none"
-                          >
-                              Confirm Payment
-                          </button>
-                      </div>
-                  </form>
+                              className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg font-bold hover:bg-slate-200 transition-colors"
+                           >
+                               Close
+                           </button>
+                       </div>
+                  )}
               </div>
           </div>
       )}
