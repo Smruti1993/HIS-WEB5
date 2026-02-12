@@ -13,5 +13,8 @@ export default defineConfig(({ mode }) => {
       // Expose the API_KEY to the client-side code as process.env.API_KEY
       'process.env.API_KEY': JSON.stringify(env.API_KEY),
     },
+    optimizeDeps: {
+      include: ['xlsx'],
+    },
   }
 })

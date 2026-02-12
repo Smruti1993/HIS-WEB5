@@ -1,11 +1,30 @@
 import React, { useState, useRef } from 'react';
 import { useData } from '../context/DataContext';
 import { MasterEntity, ServiceDefinition, ServiceTariff } from '../types';
-import { Plus, Search, Upload, Save, X, FileSpreadsheet, Check, AlertCircle, ChevronDown, Filter } from 'lucide-react';
+import { Plus, Search, Save, X, FileSpreadsheet, Download, FileDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-// --- Components ---
+// --- Helper for Downloads ---
+const downloadTemplate = (type: 'diagnosis' | 'service') => {
+    const data = type === 'diagnosis' 
+        ? [{ 'ICD Code': 'A00.0', 'Description': 'Cholera due to Vibrio cholerae 01, biovar cholerae' }]
+        : [{ 
+            'Code': 'SVC001', 
+            'Name': 'General Consultation', 
+            'Category': 'Consultation', 
+            'Type': 'Single service', 
+            'Price': 50.00,
+            'Schedulable': true,
+            'Surgical': false 
+          }];
 
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Template");
+    XLSX.writeFile(wb, `${type}_upload_template.xlsx`);
+};
+
+// --- Generic Component for Simple Masters ---
 const MasterList = <T extends MasterEntity>({ 
   title, 
   data, 
@@ -31,7 +50,7 @@ const MasterList = <T extends MasterEntity>({
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
         <h3 className="font-semibold text-slate-800">{title}</h3>
         <button 
@@ -90,6 +109,7 @@ const MasterList = <T extends MasterEntity>({
   );
 };
 
+// --- Diagnosis Master Component ---
 const DiagnosisMaster = () => {
     const { masterDiagnoses, uploadMasterDiagnoses, isLoading } = useData();
     const [searchTerm, setSearchTerm] = useState('');
@@ -107,7 +127,6 @@ const DiagnosisMaster = () => {
             const ws = wb.Sheets[wsname];
             const data = XLSX.utils.sheet_to_json(ws) as any[];
             
-            // Map to MasterDiagnosis
             const mapped = data.map((row: any) => ({
                 id: Date.now().toString() + Math.random(),
                 code: row['ICD Code'] || row['Code'] || '',
@@ -128,21 +147,28 @@ const DiagnosisMaster = () => {
     );
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[calc(100vh-200px)]">
-            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <div className="flex items-center gap-4">
-                    <h3 className="font-bold text-slate-800">Master Diagnosis (ICD-10)</h3>
-                    <div className="relative">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[calc(100vh-200px)] animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center bg-slate-50/50 gap-4">
+                <div className="flex items-center gap-4 w-full md:w-auto">
+                    <h3 className="font-bold text-slate-800 whitespace-nowrap">Diagnosis (ICD-10)</h3>
+                    <div className="relative w-full md:w-64">
                         <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                         <input 
-                            className="pl-9 pr-4 py-1.5 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 w-64"
+                            className="pl-9 pr-4 py-1.5 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 w-full"
                             placeholder="Search code or description..."
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
                         />
                     </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 w-full md:w-auto justify-end">
+                    <button 
+                        onClick={() => downloadTemplate('diagnosis')}
+                        className="p-2 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg border border-slate-200 transition-colors"
+                        title="Download Template"
+                    >
+                        <FileDown className="w-5 h-5" />
+                    </button>
                     <input 
                         type="file" 
                         accept=".xlsx, .xls" 
@@ -192,6 +218,7 @@ const DiagnosisMaster = () => {
     );
 };
 
+// --- Service Master Component ---
 const ServiceMaster = () => {
     const { serviceDefinitions, saveServiceDefinition, uploadServiceDefinitions, isLoading } = useData();
     const [showForm, setShowForm] = useState(false);
@@ -228,11 +255,6 @@ const ServiceMaster = () => {
     const [price, setPrice] = useState<string>('');
 
     const handleEdit = (s: ServiceDefinition) => {
-        // Find tariff
-        // Note: In real app, tariffs are loaded. For now assuming we might not have it perfectly linked in this mock if not passed.
-        // But context provides serviceTariffs.
-        // We will just use the `s` object if it includes tariffs or fetch from context if needed.
-        // For simplicity, we just set form.
         setForm(s);
         // Extract price from tariffs if available
         if (s.tariffs && s.tariffs.length > 0) {
@@ -303,7 +325,7 @@ const ServiceMaster = () => {
                 isAuthRequired: false,
                 tariffs: [{
                     id: Date.now().toString() + Math.random(),
-                    serviceId: '', // Will be set in context
+                    serviceId: '', 
                     tariffName: 'Self Pay',
                     price: parseFloat(row['Price']) || 0,
                     effectiveDate: new Date().toISOString(),
@@ -324,23 +346,30 @@ const ServiceMaster = () => {
     );
 
     return (
-        <div className="flex gap-6 h-[calc(100vh-200px)]">
+        <div className="flex gap-6 h-[calc(100vh-200px)] animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* List Section */}
             <div className={`flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col ${showForm ? 'hidden md:flex' : ''}`}>
-                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                    <div className="flex items-center gap-4">
-                        <h3 className="font-bold text-slate-800">Service Master</h3>
-                        <div className="relative">
+                <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center bg-slate-50/50 gap-4">
+                    <div className="flex items-center gap-4 w-full md:w-auto">
+                        <h3 className="font-bold text-slate-800 whitespace-nowrap">Service Master</h3>
+                        <div className="relative w-full md:w-64">
                             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                             <input 
-                                className="pl-9 pr-4 py-1.5 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 w-64"
+                                className="pl-9 pr-4 py-1.5 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 w-full"
                                 placeholder="Search service..."
                                 value={searchTerm}
                                 onChange={e => setSearchTerm(e.target.value)}
                             />
                         </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 w-full md:w-auto justify-end">
+                        <button 
+                            onClick={() => downloadTemplate('service')}
+                            className="p-2 bg-white text-slate-600 rounded-lg border border-slate-200 hover:bg-slate-50 hover:text-blue-600 transition-colors"
+                            title="Download Template"
+                        >
+                            <FileDown className="w-5 h-5" />
+                        </button>
                         <input 
                             type="file" 
                             accept=".xlsx, .xls" 
