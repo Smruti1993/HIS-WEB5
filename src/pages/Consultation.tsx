@@ -1,13 +1,12 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { 
-  User, Info, Save, Printer, FileText, Bell, Activity, Stethoscope, Briefcase, 
-  Pill, Clock, FileInput, ChevronRight, ChevronDown, 
-  Bold, Italic, Underline, List, AlignLeft, Type, Download, XCircle, Cloud, CheckCircle, Loader2, Calculator, Plus, Trash2, Search, RotateCcw, History, AlertTriangle, ArrowLeft, Calendar, Wind, Scale, Edit, X, RefreshCw
+  User, Info, Save, FileText, Bell, Activity, Briefcase, 
+  Pill, Clock, XCircle, CheckCircle, Trash2, Search, AlertTriangle, ArrowLeft, Calendar, Edit, X
 } from 'lucide-react';
-import { VitalSign, Allergy, Diagnosis, ServiceDefinition, ServiceOrder } from '../types';
+import { ServiceDefinition, ServiceOrder } from '../types';
 import { DentalChart } from '../components/DentalChart';
 
 // --- Static Configs ---
@@ -63,7 +62,7 @@ const ServiceOrderingModal = ({
     doctorId: string, 
     onClose: () => void 
 }) => {
-    const { serviceDefinitions, serviceTariffs, departments, serviceOrders, saveServiceOrders, showToast } = useData();
+    const { serviceDefinitions, serviceTariffs, departments, saveServiceOrders, showToast } = useData();
     
     // Filters
     const [filterServiceType, setFilterServiceType] = useState('All');
@@ -335,12 +334,10 @@ const ServiceOrderingModal = ({
 
 const CPOEView = ({ 
     appointmentId, 
-    patientName,
     doctorId,
     onClose 
 }: { 
     appointmentId: string, 
-    patientName: string,
     doctorId: string,
     onClose: () => void 
 }) => {
@@ -350,7 +347,6 @@ const CPOEView = ({
     // Filters
     const [orderDateFrom, setOrderDateFrom] = useState(new Date().toISOString().split('T')[0]);
     const [orderDateTo, setOrderDateTo] = useState(new Date().toISOString().split('T')[0]);
-    const [statusFilter, setStatusFilter] = useState('All');
 
     const appointmentOrders = serviceOrders.filter(o => o.appointmentId === appointmentId);
 
@@ -604,7 +600,7 @@ const VitalsEntryModal = ({ appointmentId, onClose }: { appointmentId: string, o
 
 // AllergyEntryModal
 const AllergyEntryModal = ({ patientId, onClose }: { patientId: string, onClose: () => void }) => {
-    const { saveAllergy, showToast } = useData();
+    const { saveAllergy } = useData();
     const [form, setForm] = useState({
         allergen: '', severity: 'Mild', reaction: '', status: 'Active', allergyType: 'Drug'
     });
@@ -752,7 +748,7 @@ const DiagnosisEntryModal = ({ appointmentId, onClose }: { appointmentId: string
 export const Consultation = () => {
   const { appointmentId } = useParams<{ appointmentId: string }>();
   const navigate = useNavigate();
-  const { appointments, patients, vitals, updateAppointment, clinicalNotes, saveClinicalNote, employees, departments, allergies, diagnoses } = useData();
+  const { appointments, patients, vitals, updateAppointment, employees, departments, allergies, diagnoses } = useData();
   
   const [activeSection, setActiveSection] = useState('Chief Complaint');
   
@@ -872,7 +868,7 @@ export const Consultation = () => {
         {showVitals && <VitalsEntryModal appointmentId={appointment.id} onClose={() => setShowVitals(false)} />}
         {showAllergy && <AllergyEntryModal patientId={patient.id} onClose={() => setShowAllergy(false)} />}
         {showDiagnosis && <DiagnosisEntryModal appointmentId={appointment.id} onClose={() => setShowDiagnosis(false)} />}
-        {showCPOE && <CPOEView appointmentId={appointment.id} patientName={`${patient.firstName} ${patient.lastName}`} doctorId={employee?.id || ''} onClose={() => setShowCPOE(false)} />}
+        {showCPOE && <CPOEView appointmentId={appointment.id} doctorId={employee?.id || ''} onClose={() => setShowCPOE(false)} />}
 
         {/* 1. Sub-Header (White) */}
         <div className="bg-white px-6 py-2 border-b border-slate-200 flex justify-between items-center shrink-0 shadow-sm z-20 h-14">

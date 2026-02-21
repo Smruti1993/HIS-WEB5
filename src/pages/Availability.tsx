@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
 import { DAYS_OF_WEEK } from '../constants';
-import { Clock, Check, Pencil, X } from 'lucide-react';
+import { Clock, Pencil, X, AlertTriangle, Calendar } from 'lucide-react';
 import { DoctorAvailability } from '../types';
 
 export const Availability = () => {
-  const { employees, availabilities, saveAvailability, deleteAvailability } = useData();
+  const { employees, availabilities, saveAvailability, deleteAvailability, appointments } = useData();
   const doctors = employees.filter(e => e.role === 'Doctor');
   
   const [selectedDoctor, setSelectedDoctor] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   
   const initialFormState = {
     dayOfWeek: 1, // Monday
@@ -35,9 +36,60 @@ export const Availability = () => {
     setEditingId(null);
   };
 
+  const getMinutes = (time: string) => {
+    const [h, m] = time.split(':').map(Number);
+    return h * 60 + m;
+  };
+
+  const isTimeOverlap = (start1: number, end1: number, start2: number, end2: number) => {
+    return Math.max(start1, start2) < Math.min(end1, end2);
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDoctor) return;
+    setError(null);
+
+    const newStart = getMinutes(formData.startTime);
+    const newEnd = getMinutes(formData.endTime);
+
+    if (newStart >= newEnd) {
+        setError("End time must be after start time.");
+        return;
+    }
+
+    // Check for overlaps
+    const hasOverlap = availabilities.some(a => 
+        a.doctorId === selectedDoctor && 
+        a.dayOfWeek === formData.dayOfWeek && 
+        a.id !== editingId &&
+        isTimeOverlap(newStart, newEnd, getMinutes(a.startTime), getMinutes(a.endTime))
+    );
+
+    if (hasOverlap) {
+        setError("This time slot overlaps with another existing schedule.");
+        return;
+    }
+
+    // Check for conflicts with existing appointments
+    if (editingId) {
+        const conflicts = appointments.filter(apt => {
+            if (apt.doctorId !== selectedDoctor || apt.status === 'Cancelled') return false;
+            const aptDate = new Date(apt.date);
+            if (aptDate < new Date()) return false; // Only future
+            if (aptDate.getDay() !== formData.dayOfWeek) return false;
+
+            const aptTime = getMinutes(apt.time);
+            // Check if it fits in new range
+            return !(aptTime >= newStart && aptTime < newEnd);
+        });
+
+        if (conflicts.length > 0) {
+            if (!window.confirm(`Warning: ${conflicts.length} future appointments fall outside this new time range. Proceed?`)) {
+                return;
+            }
+        }
+    }
 
     if (editingId) {
       deleteAvailability(editingId);
@@ -50,6 +102,51 @@ export const Availability = () => {
     });
 
     handleCancelEdit();
+  };
+
+  const handleDeleteClick = (id: string) => {
+    const avail = availabilities.find(a => a.id === id);
+    if (!avail) return;
+
+    // Check for future appointments in this slot
+    const start = getMinutes(avail.startTime);
+    const end = getMinutes(avail.endTime);
+    
+    const conflicts = appointments.filter(apt => {
+        if (apt.doctorId !== avail.doctorId || apt.status === 'Cancelled') return false;
+        const aptDate = new Date(apt.date);
+        if (aptDate < new Date()) return false;
+        if (aptDate.getDay() !== avail.dayOfWeek) return false;
+        
+        const aptTime = getMinutes(apt.time);
+        return aptTime >= start && aptTime < end;
+    });
+
+    if (conflicts.length > 0) {
+        if (!window.confirm(`Warning: There are ${conflicts.length} future appointments scheduled in this slot. Deleting it will orphan them. Proceed?`)) {
+            return;
+        }
+    }
+    
+    if (window.confirm('Are you sure you want to delete this schedule?')) {
+        deleteAvailability(id);
+        if (editingId === id) handleCancelEdit();
+    }
+  };
+
+  const getFutureAppointmentCount = (avail: DoctorAvailability) => {
+      const start = getMinutes(avail.startTime);
+      const end = getMinutes(avail.endTime);
+
+      return appointments.filter(apt => {
+          if (apt.doctorId !== avail.doctorId || apt.status === 'Cancelled') return false;
+          const aptDate = new Date(apt.date);
+          if (aptDate < new Date()) return false;
+          if (aptDate.getDay() !== avail.dayOfWeek) return false;
+          
+          const aptTime = getMinutes(apt.time);
+          return aptTime >= start && aptTime < end;
+      }).length;
   };
 
   const getDoctorAvailability = (docId: string) => {
@@ -66,6 +163,12 @@ export const Availability = () => {
         </h2>
         
         <form onSubmit={handleSave} className="space-y-5">
+            {error && (
+                <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                    {error}
+                </div>
+            )}
             <div>
                 <label className="form-label">Select Doctor</label>
                 <select 
@@ -165,6 +268,14 @@ export const Availability = () => {
                                     <div>
                                         <p className="font-semibold text-slate-800">{DAYS_OF_WEEK[av.dayOfWeek]}</p>
                                         <p className="text-sm text-slate-500">{av.slotDurationMinutes} min slots</p>
+                                        
+                                        {/* Booked Slots Indicator */}
+                                        <div className="mt-1 flex items-center gap-1.5">
+                                            <Calendar className="w-3 h-3 text-slate-400" />
+                                            <span className={`text-xs font-medium ${getFutureAppointmentCount(av) > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
+                                                {getFutureAppointmentCount(av)} Future Bookings
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">
@@ -175,6 +286,12 @@ export const Availability = () => {
                                     <div className={`text-slate-300 group-hover:text-blue-500 transition-colors ${editingId === av.id ? 'text-blue-500' : ''}`}>
                                         <Pencil className="w-4 h-4" />
                                     </div>
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteClick(av.id); }}
+                                        className="text-slate-300 hover:text-red-500 transition-colors p-1"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
                                 </div>
                             </div>
                         ))
