@@ -20,7 +20,7 @@ CREATE POLICY "Read access for admin and lab managers" ON lab_service_import_log
   FOR SELECT TO authenticated USING (
     EXISTS (
       SELECT 1 FROM app_users
-      WHERE id = auth.uid()
+      WHERE id = auth.uid()::text
       AND (role = 'Administrator' OR role = 'Lab Manager')
     )
   );

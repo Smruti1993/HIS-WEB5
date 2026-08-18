@@ -8,6 +8,7 @@ interface DrugGenericOption {
   genericCode: string;
   genericName: string;
   strength: string;
+  strengthUnit?: string;
 }
 
 interface DrugMasterRecord {
@@ -18,9 +19,27 @@ interface DrugMasterRecord {
   genericId: string;
   genericName?: string;
   isActive: boolean;
+  dosageForm?: string;
+  packSize?: number;
+  packUnit?: string;
+  substitutable?: boolean;
+  marginPercent?: number;
+  costPrice?: number;
 }
 
-const EMPTY: DrugMasterRecord = { itemId: '', itemCode: '', drugName: '', genericId: '', isActive: true };
+const EMPTY: DrugMasterRecord = {
+  itemId: '',
+  itemCode: '',
+  drugName: '',
+  genericId: '',
+  isActive: true,
+  dosageForm: 'tablet',
+  packSize: 1,
+  packUnit: 'tablets',
+  substitutable: true,
+  marginPercent: 0,
+  costPrice: 0
+};
 
 export const DrugMaster: React.FC = () => {
   const { inventoryItems, saveDrugMaster, deleteDrugMaster } = useData();
@@ -62,7 +81,7 @@ export const DrugMaster: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('pharmacy_drug_master')
-        .select('*, generic:generic_id(generic_name, generic_code, strength)')
+        .select('*, generic:generic_id(generic_name, generic_code, strength, strength_unit)')
         .order('drug_name');
       if (error) throw error;
       setRecords((data || []).map((r: any) => ({
@@ -71,8 +90,14 @@ export const DrugMaster: React.FC = () => {
         itemCode: r.item_code,
         drugName: r.drug_name,
         genericId: r.generic_id || '',
-        genericName: r.generic ? `${r.generic.generic_name} (${r.generic.strength || '—'})` : '—',
+        genericName: r.generic ? `${r.generic.generic_name} (${r.generic.strength || '—'}${r.generic.strength_unit ? ' ' + r.generic.strength_unit : ''})` : '—',
         isActive: r.is_active,
+        dosageForm: r.dosage_form || 'tablet',
+        packSize: r.pack_size ? Number(r.pack_size) : 1,
+        packUnit: r.pack_unit || 'tablets',
+        substitutable: r.substitutable !== false,
+        marginPercent: r.margin_percent ? Number(r.margin_percent) : 0,
+        costPrice: r.cost_price ? Number(r.cost_price) : 0
       })));
     } finally {
       setLoading(false);
@@ -81,8 +106,14 @@ export const DrugMaster: React.FC = () => {
 
   const fetchGenerics = async () => {
     if (!supabase) return;
-    const { data } = await supabase.from('pharmacy_drug_generics').select('id, generic_code, generic_name, strength').eq('is_active', true).order('generic_name');
-    setGenerics((data || []).map((g: any) => ({ id: g.id, genericCode: g.generic_code, genericName: g.generic_name, strength: g.strength || '' })));
+    const { data } = await supabase.from('pharmacy_drug_generics').select('id, generic_code, generic_name, strength, strength_unit').eq('is_active', true).order('generic_name');
+    setGenerics((data || []).map((g: any) => ({
+      id: g.id,
+      genericCode: g.generic_code,
+      genericName: g.generic_name,
+      strength: g.strength || '',
+      strengthUnit: g.strength_unit || ''
+    })));
   };
 
   useEffect(() => { fetchRecords(); fetchGenerics(); }, []);
@@ -92,7 +123,7 @@ export const DrugMaster: React.FC = () => {
     setForm({ ...r });
     setItemQuery(r.itemCode);
     const g = generics.find(g => g.id === r.genericId);
-    setGenericQuery(g ? `${g.genericName} (${g.strength || '—'})` : '');
+    setGenericQuery(g ? `${g.genericName} (${g.strength || '—'}${g.strengthUnit ? ' ' + g.strengthUnit : ''})` : '');
     setShowForm(true);
     setError('');
   };
@@ -106,7 +137,7 @@ export const DrugMaster: React.FC = () => {
 
   const handleSelectGeneric = (g: DrugGenericOption) => {
     setForm(prev => ({ ...prev, genericId: g.id }));
-    setGenericQuery(`${g.genericName} (${g.strength || '—'})`);
+    setGenericQuery(`${g.genericName} (${g.strength || '—'}${g.strengthUnit ? ' ' + g.strengthUnit : ''})`);
     setShowGenericDropdown(false);
   };
 
@@ -121,6 +152,12 @@ export const DrugMaster: React.FC = () => {
         drugName: form.drugName,
         genericId: form.genericId || '',
         isActive: form.isActive,
+        dosageForm: form.dosageForm || 'tablet',
+        packSize: Number(form.packSize || 1),
+        packUnit: form.packUnit || 'tablets',
+        substitutable: form.substitutable !== false,
+        marginPercent: Number(form.marginPercent || 0),
+        costPrice: Number(form.costPrice || 0)
       });
       if (success) {
           closeForm();
@@ -356,7 +393,7 @@ export const DrugMaster: React.FC = () => {
                           className="w-full text-left px-3 py-2 hover:bg-violet-50 transition-colors border-b border-slate-50 last:border-0"
                         >
                           <p className="text-xs font-medium text-slate-800">{g.genericName}</p>
-                          <p className="text-[10px] text-slate-400">{g.genericCode}{g.strength ? ` · ${g.strength}` : ''}</p>
+                          <p className="text-[10px] text-slate-400">{g.genericCode}{g.strength ? ` · ${g.strength}${g.strengthUnit ? ' ' + g.strengthUnit : ''}` : ''}</p>
                         </button>
                       ))}
                     </div>
@@ -371,6 +408,83 @@ export const DrugMaster: React.FC = () => {
                     </button>
                   </div>
                 )}
+              </div>
+
+              {/* Dosage Form */}
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Dosage Form</label>
+                <select 
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-violet-500 bg-white" 
+                  value={form.dosageForm || 'tablet'} 
+                  onChange={e => setForm(prev => ({ ...prev, dosageForm: e.target.value }))}
+                >
+                  {['tablet', 'capsule', 'syrup', 'cream', 'injection', 'drops', 'inhaler', 'gel'].map(df => (
+                    <option key={df} value={df}>{df.charAt(0).toUpperCase() + df.slice(1)}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Pack Size & Unit */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Pack Size</label>
+                  <input 
+                    type="number" 
+                    className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-violet-500" 
+                    value={form.packSize !== undefined ? form.packSize : 1} 
+                    onChange={e => setForm(prev => ({ ...prev, packSize: Number(e.target.value) }))} 
+                    min="1"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Pack Unit</label>
+                  <input 
+                    type="text" 
+                    className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-violet-500" 
+                    value={form.packUnit || 'tablets'} 
+                    onChange={e => setForm(prev => ({ ...prev, packUnit: e.target.value }))} 
+                    placeholder="tablets"
+                  />
+                </div>
+              </div>
+
+              {/* Cost Price & Margin % */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Cost Price</label>
+                  <input 
+                    type="number" 
+                    className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-violet-500" 
+                    value={form.costPrice !== undefined ? form.costPrice : 0} 
+                    onChange={e => setForm(prev => ({ ...prev, costPrice: Number(e.target.value) }))} 
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Margin %</label>
+                  <input 
+                    type="number" 
+                    className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-violet-500" 
+                    value={form.marginPercent !== undefined ? form.marginPercent : 0} 
+                    onChange={e => setForm(prev => ({ ...prev, marginPercent: Number(e.target.value) }))} 
+                    min="0"
+                    max="100"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+
+              {/* Substitutable toggle */}
+              <div className="flex items-center justify-between py-1">
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Substitution Allowed</label>
+                <button
+                  type="button"
+                  onClick={() => setForm(prev => ({ ...prev, substitutable: prev.substitutable === undefined ? false : !prev.substitutable }))}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${form.substitutable !== false ? 'bg-violet-600' : 'bg-slate-200'}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.substitutable !== false ? 'translate-x-5' : ''}`} />
+                </button>
               </div>
 
               {/* Active toggle */}

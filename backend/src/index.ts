@@ -10,6 +10,7 @@ import proxyRoutes from './routes/proxy';
 import limsRoutes from './routes/lims';
 import astmRoutes from './routes/astm';
 import abdmRoutes from './routes/abdm';
+import pharmacyRoutes from './routes/pharmacy';
 import { authenticateJWT } from './middleware/auth';
 
 const app = express();
@@ -42,6 +43,7 @@ app.use('/api/billing', authenticateJWT, billingRoutes);
 app.use('/api/lims', authenticateJWT, limsRoutes);
 app.use('/api/astm', authenticateJWT, astmRoutes);
 app.use('/api/abdm', authenticateJWT, abdmRoutes);
+app.use('/api/pharmacy', authenticateJWT, pharmacyRoutes);
 
 // Protect everything passing through the database proxy lane
 app.use('/api/db/proxy', (req, res, next) => {

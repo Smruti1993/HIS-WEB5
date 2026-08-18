@@ -6,7 +6,7 @@ import {
   VitalSign, Diagnosis, ClinicalNote, Allergy, NarrativeDiagnosis, MasterDiagnosis, DentalICD, ServiceDefinition, AppUser, ServiceTariff, ServiceOrder, ServiceLocationMapping, VitalSignGroup, VitalSignParameter, PatientDocument, InventoryItem, InventoryItemStock, InventoryItemPricing, Branch, Store, StoreItemMapping, OpeningStock, StockLedgerEntry, DashboardMetrics, DirectSale, Prescription, PrescriptionItem, DrugGeneric, DrugMaster, TaxMaster, ItemTaxMapping, Organization, OrganizationContact, SponsorTariff, Vendor, VendorTerm, PurchaseOrder, PurchaseOrderItem, GRN, GRNItem, PurchaseReceipt, PurchaseReceiptItem, PurchaseReturn, PurchaseReturnItem, ExpiryReturn, ExpiryReturnItem, ChartOfAccount, JournalVoucher, JournalVoucherItem, GSTR2BUpload, GSTR2BInvoice, Currency, PatientRefund,
   Role, Screen, Privilege,
   LoyaltyProgramConfig, LoyaltyTier, LoyaltyRedemptionRules, LoyaltyBonusRule, LoyaltyAccount, LoyaltyTransaction, LoyaltyAccountLookupResult, LoyaltyRedemptionCalc,
-  PharmacyZone, PharmacyRack, InventoryBatchLocation, LabServiceReagent, LabReagentConsumptionLog
+  PharmacyZone, PharmacyRack, InventoryBatchLocation, LabServiceReagent, LabReagentConsumptionLog, SubstitutionLogInput
 } from '../types';
 import { 
     getSupabase, 
@@ -107,6 +107,8 @@ interface DataContextType {
   saveDirectSale: (sale: DirectSale) => Promise<{ success: boolean; savedSale?: DirectSale }>;
   fetchDirectSales: (filters?: { storeId?: string; fromDate?: string; toDate?: string }) => Promise<DirectSale[]>;
   fetchBatchDetails: (storeId: string, itemId: string) => Promise<Array<{ batchNo: string, currentStock: number, mrp: number, rate: number, batchDate?: string, expiryDate?: string }>>;
+  fetchAlternates: (itemId: string, storeId: string, prescriptionId?: string) => Promise<{ original_drug: any, alternates: any[] }>;
+  logSubstitutions: (logs: SubstitutionLogInput[]) => Promise<boolean>;
   
   fetchStockLedger: (filters: { storeId: string; fromDate?: string; toDate?: string; itemCategory?: string; searchQuery?: string }) => Promise<StockLedgerEntry[]>;
   fetchDashboardMetrics: (storeId: string) => Promise<DashboardMetrics | null>;
@@ -1440,6 +1442,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     genericName: r.generic_name,
     groupName: r.group_name,
     strength: r.strength,
+    strengthUnit: r.strength_unit || null,
     availableForms: r.available_forms,
     formOfAdministration: r.form_of_administration,
     routeOfAdministration: r.route_of_administration,
@@ -1456,6 +1459,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     drugName: r.drug_name,
     genericId: r.generic_id,
     isActive: r.is_active,
+    dosageForm: r.dosage_form || undefined,
+    packSize: r.pack_size !== undefined ? Number(r.pack_size) : 1,
+    packUnit: r.pack_unit || 'tablets',
+    substitutable: r.substitutable !== false,
+    marginPercent: r.margin_percent !== undefined ? Number(r.margin_percent) : 0,
+    costPrice: r.cost_price !== undefined ? Number(r.cost_price) : 0,
   });
 
   // --- Initial Fetch ---
@@ -2748,6 +2757,39 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (error) {
       console.error('Error fetching batch details:', error);
       return [];
+    }
+  };
+
+  const fetchAlternates = async (itemId: string, storeId: string, prescriptionId?: string) => {
+    try {
+      const token = await getAuthToken();
+      const url = `${BACKEND_URL}/api/pharmacy/drugs/${itemId}/alternates?store_id=${storeId}${prescriptionId ? `&prescription_id=${prescriptionId}` : ''}`;
+      const res = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) return { original_drug: null, alternates: [] };
+      return await res.json();
+    } catch (err) {
+      console.error('Error fetching alternates:', err);
+      return { original_drug: null, alternates: [] };
+    }
+  };
+
+  const logSubstitutions = async (logs: SubstitutionLogInput[]) => {
+    try {
+      const token = await getAuthToken();
+      const res = await fetch(`${BACKEND_URL}/api/pharmacy/sales/substitution-log`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ logs })
+      });
+      return res.ok;
+    } catch (err) {
+      console.error('Error logging substitutions:', err);
+      return false;
     }
   };
 
@@ -4995,6 +5037,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               drug_name: mapping.drugName,
               generic_id: mapping.genericId || null,
               is_active: mapping.isActive,
+              dosage_form: mapping.dosageForm || 'tablet',
+              pack_size: mapping.packSize !== undefined ? Number(mapping.packSize) : 1.0,
+              pack_unit: mapping.packUnit || 'tablets',
+              substitutable: mapping.substitutable !== false,
+              margin_percent: mapping.marginPercent !== undefined ? Number(mapping.marginPercent) : 0.00,
+              cost_price: mapping.costPrice !== undefined ? Number(mapping.costPrice) : 0.00
           };
           if (mapping.id) payload.id = mapping.id;
 
@@ -7860,7 +7908,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       storeItemMappings, saveStoreItemMapping, deleteStoreItemMapping,
       reagentsMapping, fetchReagentMappings, saveReagentMapping, deleteReagentMapping, fetchReagentConsumptionLog,
       openingStocks, saveOpeningStock, fetchStockLedger, fetchDashboardMetrics,
-      saveDirectSale, fetchDirectSales, fetchBatchDetails, repairPh000006, processPharmacyReturn, fetchBillItems,
+      saveDirectSale, fetchDirectSales, fetchBatchDetails, fetchAlternates, logSubstitutions, repairPh000006, processPharmacyReturn, fetchBillItems,
       prescriptions, savePrescription, dispensePrescription,
       drugGenerics, drugMasters, saveDrugMaster, deleteDrugMaster,
       taxMasters, saveTaxMaster, deleteTaxMaster, itemTaxMappings, saveItemTaxMapping, deleteItemTaxMapping,

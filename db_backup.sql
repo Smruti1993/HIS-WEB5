@@ -413,7 +413,10 @@ CREATE TABLE IF NOT EXISTS public.inventory_item_stocks (
   item_rate numeric DEFAULT 1.0,
   fsn_type text,
   is_bulky boolean DEFAULT false,
-  cycle_count_frequency text
+  cycle_count_frequency text,
+  reusable_count numeric DEFAULT 0,
+  reserved_qty numeric DEFAULT 0.0,
+  manufacturer_name text
 );
 
 -- ─── inventory_items ─────────────────────────────────────────
@@ -426,33 +429,41 @@ CREATE TABLE IF NOT EXISTS public.inventory_items (
   item_type text,
   item_category text,
   item_group text,
-  manufacturer text,
-  brand text,
-  hsn_sac_code text,
-  reorder_level numeric,
-  standard_price numeric,
+  item_class text,
+  stock_type text,
+  procurement_type text,
+  base_uom text,
+  track_uom text,
   distribution_category text,
   purchase_organisation text,
+  shelf_life_limit numeric,
+  item_specification text,
+  sfda text,
+  gtin text,
+  nphies_drug_type text,
+  is_inventorised boolean DEFAULT true,
+  is_batch_tracked boolean DEFAULT false,
+  is_expiry_date_required boolean DEFAULT false,
+  is_serialized boolean DEFAULT false,
   is_active boolean DEFAULT true,
-  is_taxable boolean DEFAULT true,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  base_uom text,
-  alternate_uom text,
-  alternate_conversion_factor numeric DEFAULT 1,
-  deleted_at timestamp with time zone,
-  expiry_tracking boolean DEFAULT false,
-  storage_condition text,
-  requires_batch_no boolean DEFAULT false,
+  is_approval_required boolean DEFAULT false,
+  is_insurance_cover boolean DEFAULT false,
+  drug_sub_groups text,
   purchase_uom text,
   sales_uom text,
-  purchase_conversion_factor numeric DEFAULT 1,
-  sales_conversion_factor numeric DEFAULT 1,
+  default_pricing_method text,
+  default_markup_percentage numeric,
+  branch text,
   purchase_inventory_acc text,
   cost_of_sales_acc text,
   sale_account text,
-  stock_account text,
-  tax_preference text
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  reorder_level numeric,
+  min_stock_level numeric,
+  purchase_conversion_factor numeric DEFAULT 1,
+  sales_conversion_factor numeric DEFAULT 1,
+  storage_condition text
 );
 
 -- ─── inventory_opening_stock_items ───────────────────────────
@@ -514,13 +525,13 @@ CREATE TABLE IF NOT EXISTS public.item_tax_mappings (
 CREATE TABLE IF NOT EXISTS public.lab_reagent_consumption_log (
   id uuid DEFAULT gen_random_uuid(),
   lab_order_id uuid,
-  service_id uuid,
+  service_id text,
   item_id uuid,
   store_id uuid,
   quantity_deducted numeric,
   batch_no text,
   action text,
-  performed_by uuid,
+  performed_by text,
   reversed_by_log_id uuid,
   notes text,
   created_at timestamp with time zone DEFAULT now()
@@ -529,23 +540,22 @@ CREATE TABLE IF NOT EXISTS public.lab_reagent_consumption_log (
 -- ─── lab_service_import_log ──────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.lab_service_import_log (
   id uuid DEFAULT gen_random_uuid(),
-  filename text,
-  import_type text,
-  total_rows integer,
-  created_count integer,
-  updated_count integer,
-  skipped_count integer,
-  error_count integer,
-  row_results jsonb,
-  performed_by uuid,
+  performed_by text,
+  file_name text,
+  total_rows integer NOT NULL,
+  created_count integer NOT NULL DEFAULT 0,
+  updated_count integer NOT NULL DEFAULT 0,
+  skipped_count integer NOT NULL DEFAULT 0,
+  error_count integer NOT NULL DEFAULT 0,
+  row_results jsonb NOT NULL,
   created_at timestamp with time zone DEFAULT now()
 );
 
 -- ─── lab_service_profile_components ─────────────────────────
 CREATE TABLE IF NOT EXISTS public.lab_service_profile_components (
   id uuid DEFAULT gen_random_uuid(),
-  profile_service_id uuid,
-  component_service_id uuid,
+  profile_service_id text,
+  component_service_id text,
   display_order integer DEFAULT 0,
   is_active boolean DEFAULT true,
   created_at timestamp with time zone DEFAULT now()
@@ -554,10 +564,10 @@ CREATE TABLE IF NOT EXISTS public.lab_service_profile_components (
 -- ─── lab_service_reagents ────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.lab_service_reagents (
   id uuid DEFAULT gen_random_uuid(),
-  service_id uuid,
+  service_id text,
   item_id uuid,
   store_id uuid,
-  unit_id uuid,
+  unit_id text,
   quantity_per_test numeric,
   notes text,
   is_active boolean DEFAULT true,
@@ -570,9 +580,7 @@ CREATE TABLE IF NOT EXISTS public.lims_antibiotics (
   id uuid DEFAULT gen_random_uuid(),
   name text,
   code text,
-  status text DEFAULT 'Active'::text,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now()
+  status text DEFAULT 'Active'::text
 );
 
 -- ─── lims_containers ─────────────────────────────────────────
@@ -580,11 +588,8 @@ CREATE TABLE IF NOT EXISTS public.lims_containers (
   id uuid DEFAULT gen_random_uuid(),
   name text,
   code text,
-  color text,
-  description text,
-  status text DEFAULT 'Active'::text,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now()
+  cap_color text,
+  status text DEFAULT 'Active'::text
 );
 
 -- ─── lims_equipment ──────────────────────────────────────────
@@ -603,7 +608,7 @@ CREATE TABLE IF NOT EXISTS public.lims_equipment (
 CREATE TABLE IF NOT EXISTS public.lims_lab_orders (
   id uuid DEFAULT gen_random_uuid(),
   service_order_id uuid,
-  service_id uuid,
+  service_id text,
   barcode_no text,
   status text DEFAULT 'Ordered'::text,
   ordered_at timestamp with time zone DEFAULT now(),
@@ -621,7 +626,7 @@ CREATE TABLE IF NOT EXISTS public.lims_lab_orders (
   remarks text,
   is_outsourced boolean DEFAULT false,
   outsource_lab_id uuid,
-  source_profile_service_id uuid,
+  source_profile_service_id text,
   result_verified_at timestamp with time zone,
   result_verified_by text
 );
@@ -631,9 +636,7 @@ CREATE TABLE IF NOT EXISTS public.lims_organisms (
   id uuid DEFAULT gen_random_uuid(),
   name text,
   code text,
-  status text DEFAULT 'Active'::text,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now()
+  status text DEFAULT 'Active'::text
 );
 
 -- ─── lims_outsource_labs ─────────────────────────────────────
@@ -641,11 +644,9 @@ CREATE TABLE IF NOT EXISTS public.lims_outsource_labs (
   id uuid DEFAULT gen_random_uuid(),
   name text,
   code text,
-  address text,
-  contact text,
-  status text DEFAULT 'Active'::text,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now()
+  contact_no text,
+  email text,
+  status text DEFAULT 'Active'::text
 );
 
 -- ─── lims_parameter_options ──────────────────────────────────
@@ -653,33 +654,35 @@ CREATE TABLE IF NOT EXISTS public.lims_parameter_options (
   id uuid DEFAULT gen_random_uuid(),
   parameter_id uuid,
   option_value text,
-  display_order integer DEFAULT 0,
-  created_at timestamp with time zone DEFAULT now()
+  sort_order integer DEFAULT 0,
+  status text DEFAULT 'Active'::text
 );
 
 -- ─── lims_reference_ranges ───────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.lims_reference_ranges (
   id uuid DEFAULT gen_random_uuid(),
   parameter_id uuid,
-  equipment_id uuid,
   gender text,
   age_min numeric,
   age_max numeric,
-  age_unit text DEFAULT 'years'::text,
-  normal_low numeric,
-  normal_high numeric,
-  critical_low numeric,
-  critical_high numeric,
+  ref_min text,
+  ref_max text,
+  critical_min text,
+  critical_max text,
   unit text,
-  reference_text text,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now()
+  status text DEFAULT 'Active'::text,
+  remarks text,
+  borderline_low text,
+  borderline_high text,
+  equipment_id uuid,
+  site text,
+  is_derived boolean DEFAULT false
 );
 
 -- ─── lims_reference_remarks ──────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.lims_reference_remarks (
   id uuid DEFAULT gen_random_uuid(),
-  service_id uuid,
+  service_id text,
   parameter_id uuid,
   equipment_id uuid,
   remark_type text,
@@ -693,13 +696,13 @@ CREATE TABLE IF NOT EXISTS public.lims_results (
   id uuid DEFAULT gen_random_uuid(),
   lab_order_id uuid,
   parameter_id uuid,
-  equipment_id uuid,
-  result_value text,
-  unit text,
-  status text DEFAULT 'Pending'::text,
-  abnormal_flag text,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now()
+  value text,
+  flag text,
+  is_amended boolean DEFAULT false,
+  amended_reason text,
+  captured_by text,
+  captured_at timestamp with time zone DEFAULT now(),
+  equipment_id uuid
 );
 
 -- ─── lims_samples ────────────────────────────────────────────
@@ -709,48 +712,53 @@ CREATE TABLE IF NOT EXISTS public.lims_samples (
   specimen_id uuid,
   container_id uuid,
   sample_no text,
-  collected_at timestamp with time zone,
-  received_at timestamp with time zone,
-  received_by uuid,
-  sent_at timestamp with time zone,
-  sent_by uuid,
-  condition text,
+  status text DEFAULT 'Collected'::text,
   rejection_reason text,
-  status text DEFAULT 'Pending'::text,
-  created_at timestamp with time zone DEFAULT now()
+  rejected_by text,
+  collection_site text,
+  volume_ml numeric,
+  temp_req text,
+  sent_by text,
+  sent_time timestamp with time zone,
+  condition text,
+  section text,
+  received_at timestamp with time zone,
+  received_by text
 );
 
 -- ─── lims_service_configs ────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.lims_service_configs (
-  service_id uuid,
-  specimen_id uuid,
-  container_id uuid,
-  sample_volume numeric,
-  tat_hours integer,
-  report_template text,
-  notes text,
+  service_id text,
+  result_type text,
+  clinical_significance text,
+  patient_instruction text,
+  phlebotomist_instruction text,
+  technician_instruction text,
+  gender_wise boolean DEFAULT false,
+  age_range_wise boolean DEFAULT false,
+  delta_check boolean DEFAULT false,
+  is_result_mandatory boolean DEFAULT true,
+  is_derived boolean DEFAULT false,
   created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  service_type text DEFAULT 'Test'::text,
-  methodology text,
-  sample_stability text,
-  storage_condition text
+  specimen_id uuid,
+  container_id uuid
 );
 
 -- ─── lims_service_parameters ─────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.lims_service_parameters (
   id uuid DEFAULT gen_random_uuid(),
-  service_id uuid,
+  service_id text,
   name text,
   code text,
-  parameter_type text DEFAULT 'Numeric'::text,
-  unit text,
-  decimal_places integer DEFAULT 2,
-  display_order integer DEFAULT 0,
-  is_reportable boolean DEFAULT true,
+  result_type text,
+  sort_order integer DEFAULT 0,
+  status text DEFAULT 'Active'::text,
   parent_id uuid,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now()
+  short_name text,
+  is_mandatory boolean DEFAULT false,
+  is_derived boolean DEFAULT false,
+  is_parameter_sum boolean DEFAULT false,
+  is_active boolean DEFAULT true
 );
 
 -- ─── lims_specimens ──────────────────────────────────────────
@@ -758,10 +766,7 @@ CREATE TABLE IF NOT EXISTS public.lims_specimens (
   id uuid DEFAULT gen_random_uuid(),
   name text,
   code text,
-  description text,
-  status text DEFAULT 'Active'::text,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now()
+  status text DEFAULT 'Active'::text
 );
 
 -- ─── lims_stains ─────────────────────────────────────────────
@@ -769,10 +774,7 @@ CREATE TABLE IF NOT EXISTS public.lims_stains (
   id uuid DEFAULT gen_random_uuid(),
   name text,
   code text,
-  description text,
-  status text DEFAULT 'Active'::text,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now()
+  status text DEFAULT 'Active'::text
 );
 
 -- ─── lims_test_results ───────────────────────────────────────
@@ -780,16 +782,11 @@ CREATE TABLE IF NOT EXISTS public.lims_test_results (
   id uuid DEFAULT gen_random_uuid(),
   lab_order_id uuid,
   parameter_id uuid,
-  equipment_id uuid,
   result_value text,
-  unit text,
-  status text DEFAULT 'Pending'::text,
-  abnormal_flag text,
-  result_by uuid,
-  verified_at timestamp with time zone,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  remarks text
+  result_flag text,
+  equipment_id uuid,
+  result_at timestamp with time zone,
+  result_by text
 );
 
 -- ─── loyalty_accounts ────────────────────────────────────────
@@ -1161,29 +1158,40 @@ CREATE TABLE IF NOT EXISTS public.policy_rules (
 
 -- ─── prescription_items ──────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.prescription_items (
-  id uuid DEFAULT gen_random_uuid(),
-  prescription_id uuid,
-  drug_name text,
+  id text DEFAULT gen_random_uuid(),
+  prescription_id text,
   generic_name text,
-  dosage text,
+  item_id text,
   frequency text,
-  duration text,
-  quantity integer,
-  instructions text,
-  item_id uuid,
-  is_dispensed boolean DEFAULT false
+  dose text,
+  units text,
+  intake_qty numeric,
+  start_date date,
+  no_days integer,
+  total_qty numeric,
+  drug_instruction text,
+  remarks text,
+  status text,
+  created_at timestamp with time zone DEFAULT now(),
+  unit_price numeric,
+  tax_percentage numeric,
+  tax_amount numeric,
+  total_amount numeric
 );
 
 -- ─── prescriptions ───────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.prescriptions (
-  id uuid DEFAULT gen_random_uuid(),
+  id text DEFAULT gen_random_uuid(),
   appointment_id text,
   patient_id text,
   doctor_id text,
-  prescribed_at timestamp with time zone DEFAULT now(),
-  status text DEFAULT 'Active'::text,
-  notes text,
-  diagnosis text
+  order_date timestamp with time zone DEFAULT now(),
+  order_type text,
+  status text,
+  total_amount numeric,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  tax_amount numeric
 );
 
 -- ─── procurement_expiry_return_items ─────────────────────────
@@ -1507,30 +1515,47 @@ CREATE TABLE IF NOT EXISTS public.service_centres (
 
 -- ─── service_definitions ─────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.service_definitions (
-  id uuid DEFAULT gen_random_uuid(),
+  id text DEFAULT gen_random_uuid(),
   code text,
   name text,
-  category text,
-  sub_category text,
-  service_type text DEFAULT 'Test'::text,
-  base_price numeric DEFAULT 0,
-  tax_percentage numeric DEFAULT 0,
-  is_active boolean DEFAULT true,
-  description text,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  department_id text,
-  service_centre_id text,
+  alternate_name text,
+  service_type text,
+  service_category text,
+  est_duration integer,
+  status text,
+  chargeable boolean DEFAULT true,
+  applicable_visit_type text,
+  applicable_gender text,
+  re_order_duration integer,
+  auto_cancellation_days integer,
+  min_time_billing integer,
+  max_time_billing integer,
+  max_orderable_qty integer,
   cpt_code text,
-  loinc_code text,
-  is_profile boolean DEFAULT false,
-  tat_hours integer
+  nphies_code text,
+  nphies_desc text,
+  schedulable boolean DEFAULT false,
+  surgical_service boolean DEFAULT false,
+  individually_orderable boolean DEFAULT true,
+  auto_processable boolean DEFAULT false,
+  consent_required boolean DEFAULT false,
+  is_restricted boolean DEFAULT false,
+  is_external boolean DEFAULT false,
+  is_percentage_tariff boolean DEFAULT false,
+  is_tooth_mandatory boolean DEFAULT false,
+  is_auth_required boolean DEFAULT false,
+  group_name text,
+  billing_group_name text,
+  financial_group text,
+  cpt_description text,
+  special_instructions text,
+  created_at timestamp with time zone DEFAULT now()
 );
 
 -- ─── service_location_mappings ───────────────────────────────
 CREATE TABLE IF NOT EXISTS public.service_location_mappings (
   id uuid DEFAULT gen_random_uuid(),
-  service_id uuid,
+  service_id text,
   branch_id uuid,
   service_centre_id text,
   department_id text,
@@ -1542,7 +1567,7 @@ CREATE TABLE IF NOT EXISTS public.service_location_mappings (
 CREATE TABLE IF NOT EXISTS public.service_orders (
   id uuid DEFAULT gen_random_uuid(),
   appointment_id text,
-  service_id uuid,
+  service_id text,
   ordering_doctor_id text,
   order_date timestamp with time zone DEFAULT now(),
   status text DEFAULT 'Ordered'::text,
@@ -1562,7 +1587,7 @@ CREATE TABLE IF NOT EXISTS public.service_orders (
 -- ─── service_tariffs ─────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.service_tariffs (
   id uuid DEFAULT gen_random_uuid(),
-  service_id uuid,
+  service_id text,
   branch_id uuid,
   tariff_class text DEFAULT 'Standard'::text,
   price numeric DEFAULT 0,
@@ -1594,7 +1619,7 @@ CREATE TABLE IF NOT EXISTS public.stock_transfer_items (
   batch_no text,
   expiry_date date,
   quantity numeric DEFAULT 0,
-  unit_id uuid,
+  unit_id text,
   source_ledger_id uuid,
   destination_ledger_id uuid,
   notes text
@@ -1631,7 +1656,8 @@ CREATE TABLE IF NOT EXISTS public.stores (
   store_name text,
   store_type text,
   branch_id uuid,
-  department_id uuid,
+  department_id text,
+  status text DEFAULT 'Active'::text,
   is_active boolean DEFAULT true,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now()
@@ -1659,7 +1685,7 @@ CREATE TABLE IF NOT EXISTS public.temp_unresolved_lab_orders (
 
 -- ─── units ───────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.units (
-  id uuid DEFAULT gen_random_uuid(),
+  id text DEFAULT gen_random_uuid(),
   code text,
   name text,
   is_active boolean DEFAULT true,
@@ -1669,7 +1695,7 @@ CREATE TABLE IF NOT EXISTS public.units (
 -- ─── user_privilege_overrides ────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.user_privilege_overrides (
   id uuid DEFAULT gen_random_uuid(),
-  user_id uuid,
+  user_id text,
   screen_id uuid,
   can_view boolean DEFAULT false,
   can_create boolean DEFAULT false,
@@ -1680,7 +1706,7 @@ CREATE TABLE IF NOT EXISTS public.user_privilege_overrides (
 
 -- ─── vital_sign_groups ───────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.vital_sign_groups (
-  id uuid DEFAULT gen_random_uuid(),
+  id text DEFAULT gen_random_uuid(),
   name text,
   display_order integer DEFAULT 0,
   is_active boolean DEFAULT true,
@@ -1690,7 +1716,7 @@ CREATE TABLE IF NOT EXISTS public.vital_sign_groups (
 -- ─── vital_sign_parameters ───────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.vital_sign_parameters (
   id uuid DEFAULT gen_random_uuid(),
-  group_id uuid,
+  group_id text,
   code text,
   name text,
   unit text,

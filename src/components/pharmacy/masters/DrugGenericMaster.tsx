@@ -9,6 +9,7 @@ interface DrugGeneric {
   groupName: string;
   availableForms: string;
   strength: string;
+  strengthUnit?: string;
   formOfAdministration: string;
   routeOfAdministration: string;
   isDrugGeneric: boolean;
@@ -19,7 +20,7 @@ interface DrugGeneric {
 
 const EMPTY: DrugGeneric = {
   genericCode: '', genericName: '', groupName: '',
-  availableForms: '', strength: '',
+  availableForms: '', strength: '', strengthUnit: '',
   formOfAdministration: '', routeOfAdministration: '',
   isDrugGeneric: true, isAntibiotic: false, isNarcotic: false, isActive: true
 };
@@ -35,6 +36,7 @@ function mapFromDb(r: any): DrugGeneric {
     groupName: r.group_name || '',
     availableForms: r.available_forms || '',
     strength: r.strength || '',
+    strengthUnit: r.strength_unit || '',
     formOfAdministration: r.form_of_administration || '',
     routeOfAdministration: r.route_of_administration || '',
     isDrugGeneric: r.is_drug_generic,
@@ -52,6 +54,7 @@ function mapToDb(d: DrugGeneric) {
     group_name: d.groupName,
     available_forms: d.availableForms,
     strength: d.strength,
+    strength_unit: d.strengthUnit || null,
     form_of_administration: d.formOfAdministration,
     route_of_administration: d.routeOfAdministration,
     is_drug_generic: d.isDrugGeneric,
@@ -220,7 +223,7 @@ export const DrugGenericMaster: React.FC = () => {
                       <td className="px-3 py-2 font-mono font-medium text-slate-700">{r.genericCode}</td>
                       <td className="px-3 py-2 font-medium text-slate-800 max-w-[160px] truncate">{r.genericName}</td>
                       <td className="px-3 py-2 text-slate-500 max-w-[100px] truncate">{r.groupName || '—'}</td>
-                      <td className="px-3 py-2 text-slate-500">{r.strength || '—'}</td>
+                      <td className="px-3 py-2 text-slate-500">{r.strength ? `${r.strength} ${r.strengthUnit || ''}`.trim() : '—'}</td>
                       <td className="px-3 py-2 text-slate-500">{r.routeOfAdministration || '—'}</td>
                       <td className="px-3 py-2">
                         <div className="flex justify-center gap-1 flex-wrap">
@@ -280,14 +283,21 @@ export const DrugGenericMaster: React.FC = () => {
               )}
 
               {/* Basic fields */}
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Generic Code <span className="text-red-500">*</span></label>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-1">
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Code <span className="text-red-500">*</span></label>
                   <input className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500" value={form.genericCode} onChange={e => field('genericCode', e.target.value)} placeholder="e.g. AMX001" />
                 </div>
-                <div>
+                <div className="col-span-1">
                   <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Strength</label>
-                  <input className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500" value={form.strength} onChange={e => field('strength', e.target.value)} placeholder="e.g. 500mg" />
+                  <input className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500" value={form.strength} onChange={e => field('strength', e.target.value)} placeholder="500" />
+                </div>
+                <div className="col-span-1">
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Unit</label>
+                  <select className="w-full border border-slate-200 rounded-lg px-1.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white font-medium" value={form.strengthUnit || ''} onChange={e => field('strengthUnit', e.target.value)}>
+                    <option value="">None</option>
+                    {['mg', 'mcg', 'ml', '%', 'IU', 'g', 'mcg/ml', 'mg/ml'].map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
                 </div>
               </div>
 

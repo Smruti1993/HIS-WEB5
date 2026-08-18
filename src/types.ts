@@ -740,6 +740,7 @@ export interface DrugGeneric {
   genericName: string;
   groupName?: string;
   strength?: string;
+  strengthUnit?: 'mg' | 'mcg' | 'ml' | '%' | 'IU' | 'g' | 'mcg/ml' | 'mg/ml' | null;
   availableForms?: string;
   formOfAdministration?: string;
   routeOfAdministration?: string;
@@ -756,6 +757,21 @@ export interface DrugMaster {
   drugName: string;
   genericId: string;
   isActive: boolean;
+  dosageForm?: string;
+  packSize?: number;
+  packUnit?: string;
+  substitutable?: boolean;
+  marginPercent?: number;
+  costPrice?: number;
+}
+
+export interface SubstitutionLogInput {
+  saleId: string;
+  lineNo: number;
+  originalDrugId: string;
+  suggestedDrugIds: string[];
+  switchedToDrugId?: string;
+  action: 'kept' | 'switched' | 'dismissed';
 }
 
 export interface TaxMaster {
