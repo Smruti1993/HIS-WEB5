@@ -52,7 +52,8 @@ export const DirectSaleHistory: React.FC = () => {
         (s.invoiceNo && s.invoiceNo.toLowerCase().includes(q)) ||
         (s.saleNo && s.saleNo.toLowerCase().includes(q)) ||
         (s.firstName && s.firstName.toLowerCase().includes(q)) ||
-        (s.lastName && s.lastName.toLowerCase().includes(q))
+        (s.lastName && s.lastName.toLowerCase().includes(q)) ||
+        (s.phoneNo && s.phoneNo.toLowerCase().includes(q))
       );
     }
 
@@ -129,7 +130,7 @@ export const DirectSaleHistory: React.FC = () => {
             <div className="relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
-                placeholder="Search Invoice or Patient..."
+                placeholder="Search Invoice, Patient or Mobile..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className="w-full h-10 pl-9 pr-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-slate-50/50"

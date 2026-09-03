@@ -35,7 +35,10 @@ export const DirectSale: React.FC = () => {
     fetchBatchLocation,
     itemTaxMappings, taxMasters, formatCurrency, selectedCurrency, saveInventoryItem, showToast,
     enrollOrFetchLoyaltyAccount, calculateLoyaltyRedemption, processLoyaltyTransaction,
-    fetchAlternates, logSubstitutions
+    fetchAlternates, logSubstitutions,
+    fetchStoreStatus, declareOutageEmpty, uploadOfflineBacklogExcel, submitManualOfflineSale,
+    fetchFlaggedReconciliations, resolveReconciliationFlag, setActiveStoreId, storeStatus,
+    completeManualReconciliation
   } = useData();
 
   const decimals = selectedCurrency === 'BHD' ? 3 : 2;
@@ -115,6 +118,18 @@ export const DirectSale: React.FC = () => {
   const [visibleQuantities, setVisibleQuantities] = useState<Record<string, number>>({});
   const [favorites, setFavorites] = useState<string[]>([]);
   const [isPatientInfoCollapsed, setIsPatientInfoCollapsed] = useState(false);
+
+  // -------------------------------------------------------
+  // Offline Continuity State
+  // -------------------------------------------------------
+  const [currentStoreStatus, setCurrentStoreStatus] = useState<'live' | 'offline' | 'reconciliation_required'>('live');
+
+  // Sync local store status with global context status (updated by background ping loop)
+  useEffect(() => {
+    if (storeStatus && storeStatus.store_id === selectedStore) {
+      setCurrentStoreStatus(storeStatus.status);
+    }
+  }, [storeStatus, selectedStore]);
 
   const mappedItemIds = new Set(storeItemMappings.filter(m => m.storeId === selectedStore).map(m => m.itemId));
   
@@ -432,7 +447,7 @@ export const DirectSale: React.FC = () => {
       setShowUpiModal(false);
       setPendingSale(null);
       setPendingSaleNo('');
-      submitSubstitutionLogs(mappedSale.id || data.id);
+      submitSubstitutionLogs(mappedSale.invoiceNo || mappedSale.saleNo);
     }
   };
 
@@ -978,18 +993,21 @@ export const DirectSale: React.FC = () => {
     }
   }, [loyaltyAccount, totalBeforeDiscount, discountAmount]);
 
-  const submitSubstitutionLogs = async (saleId: string) => {
+  const submitSubstitutionLogs = async (saleTransactionId: string) => {
     const logsToSave = Object.entries(substitutionAudit).map(([index, audit]) => ({
-      saleId,
-      lineNo: Number(index) + 1,
-      originalDrugId: audit.originalDrugId,
-      suggestedDrugIds: audit.suggestedDrugIds,
-      switchedToDrugId: audit.switchedToDrugId,
-      action: audit.action
+      sale_transaction_id: saleTransactionId,
+      original_drug_id: audit.originalDrugId,
+      suggested_drug_ids: audit.suggestedDrugIds,
+      switched_to_drug_id: audit.switchedToDrugId || null,
+      action: audit.action,
+      remarks: audit.action === 'switched'
+        ? 'Pharmacist selected alternate'
+        : (audit.action === 'dismissed' ? 'Pharmacist dismissed suggestions' : 'Pharmacist kept original')
     }));
 
     if (logsToSave.length > 0) {
-      await logSubstitutions(logsToSave);
+      const terminalId = "Counter-01";
+      await logSubstitutions(logsToSave, terminalId);
     }
 
     setRowAlternates({});
@@ -1002,6 +1020,7 @@ export const DirectSale: React.FC = () => {
     setLastDispensedSale(null);
     setPatient(INITIAL_PATIENT);
     setSelectedStore('');
+    setActiveStoreId('');
     setItems([]);
     setRowBatches({});
     setPaymentMode('Cash');
@@ -1034,6 +1053,10 @@ export const DirectSale: React.FC = () => {
   };
 
   const handleDispense = async () => {
+    if (currentStoreStatus !== 'live') {
+      setError(`Dispensing is disabled. Store is currently ${currentStoreStatus}.`);
+      return;
+    }
     if (!patient.firstName) { setError('First name is required.'); return; }
     if (!selectedStore) { setError('Please select a store.'); return; }
     if (items.length === 0) { setError('Please add at least one item.'); return; }
@@ -1185,7 +1208,7 @@ export const DirectSale: React.FC = () => {
         );
       }
       setLastDispensedSale(result.savedSale);
-      if (result.savedSale.id) submitSubstitutionLogs(result.savedSale.id);
+      if (result.savedSale.id) submitSubstitutionLogs(result.savedSale.invoiceNo || result.savedSale.saleNo);
     }
     setLoading(false);
   };
@@ -1232,8 +1255,45 @@ export const DirectSale: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-        {/* Patient Details Selection */}
+      <div className="flex-1 overflow-y-auto space-y-4 pb-4 pr-1">
+
+        {/* ---- OFFLINE STATUS BANNERS (inside scroll container so button is always reachable) ---- */}
+        {selectedStore && currentStoreStatus === 'offline' && (
+          <div className="bg-amber-50 border-2 border-amber-400 text-amber-800 px-4 py-3 rounded-xl flex items-center gap-3 text-xs font-semibold">
+            <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+            <div className="flex-1">
+              <div className="font-bold text-sm">Store is Offline — Live Checkout Disabled</div>
+              <div className="font-normal mt-0.5">The system cannot reach the server. New dispense transactions are blocked. Please use the offline template to record sales manually.</div>
+            </div>
+            <a
+              href="/offline_sale_template.xlsx"
+              download
+              className="ml-2 flex-shrink-0 bg-amber-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-600 transition-colors"
+            >
+              Download Template
+            </a>
+          </div>
+        )}
+
+        {selectedStore && currentStoreStatus === 'reconciliation_required' && (
+          <div className="bg-red-50 border-2 border-red-400 text-red-800 px-4 py-3 rounded-xl text-xs font-semibold flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+              <div>
+                <div className="font-bold text-sm">Reconciliation Required — Live Checkout Locked</div>
+                <div className="font-normal mt-0.5">Offline sales were recorded during the last outage. You must reconcile the backlog before live checkout resumes.</div>
+              </div>
+            </div>
+            <a
+              href="#/pharmacy/reconciliation"
+              className="flex-shrink-0 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md shadow-red-100"
+            >
+              Go to Reconciliation Center
+            </a>
+          </div>
+        )}
+        {/* ---- END OFFLINE STATUS BANNERS ---- */}
+
         {/* Patient Details Selection */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden transition-all duration-300">
           <div 
@@ -1454,7 +1514,20 @@ export const DirectSale: React.FC = () => {
                  <select 
                    className="text-xs font-bold text-violet-700 bg-transparent outline-none cursor-pointer"
                    value={selectedStore}
-                   onChange={e => { setSelectedStore(e.target.value); setItems([]); setRowBatches({}); }}
+                    onChange={async e => {
+                      const newStore = e.target.value;
+                      setSelectedStore(newStore);
+                      setActiveStoreId(newStore);
+                      setItems([]);
+                      setRowBatches({});
+                      setCurrentStoreStatus('live');
+                      if (newStore) {
+                        const status = await fetchStoreStatus(newStore);
+                        if (status) {
+                          setCurrentStoreStatus(status.status);
+                        }
+                      }
+                    }}
                  >
                    <option value="">-- Select Store --</option>
                    {stores.filter(s => s.isActive).map(s => (
@@ -2114,7 +2187,10 @@ export const DirectSale: React.FC = () => {
             )}
           </div>
         )}
-      </div>
+      </div>{/* end flex-1 overflow-y-auto scrollable container */}
+
+      {/* ---- END STATUS BANNERS ---- */}
+
 
       {error && (
         <div className="flex-shrink-0 bg-red-50 border border-red-200 text-red-600 px-4 py-2 rounded-xl flex items-center gap-2 text-xs font-semibold animate-in slide-in-from-bottom-2">

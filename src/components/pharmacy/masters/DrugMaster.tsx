@@ -91,7 +91,7 @@ export const DrugMaster: React.FC = () => {
         drugName: r.drug_name,
         genericId: r.generic_id || '',
         genericName: r.generic ? `${r.generic.generic_name} (${r.generic.strength || '—'}${r.generic.strength_unit ? ' ' + r.generic.strength_unit : ''})` : '—',
-        isActive: r.is_active,
+        isActive: r.is_active !== false,
         dosageForm: r.dosage_form || 'tablet',
         packSize: r.pack_size ? Number(r.pack_size) : 1,
         packUnit: r.pack_unit || 'tablets',

@@ -108,7 +108,7 @@ interface DataContextType {
   fetchDirectSales: (filters?: { storeId?: string; fromDate?: string; toDate?: string }) => Promise<DirectSale[]>;
   fetchBatchDetails: (storeId: string, itemId: string) => Promise<Array<{ batchNo: string, currentStock: number, mrp: number, rate: number, batchDate?: string, expiryDate?: string }>>;
   fetchAlternates: (itemId: string, storeId: string, prescriptionId?: string) => Promise<{ original_drug: any, alternates: any[] }>;
-  logSubstitutions: (logs: SubstitutionLogInput[]) => Promise<boolean>;
+  logSubstitutions: (logs: SubstitutionLogInput[], terminalId?: string) => Promise<boolean>;
   
   fetchStockLedger: (filters: { storeId: string; fromDate?: string; toDate?: string; itemCategory?: string; searchQuery?: string }) => Promise<StockLedgerEntry[]>;
   fetchDashboardMetrics: (storeId: string) => Promise<DashboardMetrics | null>;
@@ -273,6 +273,77 @@ interface DataContextType {
   updateAppUserRole: (userId: string, roleId: string | null, isActive: boolean, userCode?: string, mobile?: string) => Promise<boolean>;
   saveAppUser: (appUser: Partial<AppUser> & { password?: string }) => Promise<boolean>;
   deleteAppUser: (userId: string) => Promise<boolean>;
+
+  // Offline Continuity & Reconciliation
+  storeStatus: StoreStatus | null;
+  setActiveStoreId: (storeId: string) => void;
+  fetchStoreStatus: (storeId: string) => Promise<StoreStatus | null>;
+  declareOutageEmpty: (storeId: string) => Promise<boolean>;
+  uploadOfflineBacklogExcel: (storeId: string, file: File) => Promise<{ success: boolean; inserted: number; flagged: number; rows: any[] }>;
+  submitManualOfflineSale: (storeId: string, saleRow: ManualOfflineSaleRow) => Promise<{ success: boolean; flagged?: boolean; error?: string }>;
+  fetchFlaggedReconciliations: (storeId: string) => Promise<FlaggedReconciliation[]>;
+  resolveReconciliationFlag: (ledgerId: string, resolution: string, correctedBatchNo?: string) => Promise<boolean>;
+  completeManualReconciliation: (storeId: string) => Promise<boolean>;
+}
+
+// -------------------------------------------------------
+// Offline Continuity Types
+// -------------------------------------------------------
+export interface StoreStatus {
+  store_id: string;
+  status: 'live' | 'offline' | 'reconciliation_required';
+  went_offline_at?: string;
+  went_offline_source?: 'client_detected' | 'server_heartbeat_timeout';
+  reconnected_at?: string;
+  reconciliation_cleared_at?: string;
+  updated_at?: string;
+}
+
+export interface BacklogBatch {
+  id: string;
+  store_id: string;
+  outage_started_at: string;
+  outage_ended_at: string;
+  outage_started_source?: 'client_detected' | 'server_heartbeat_timeout';
+  upload_method?: 'excel' | 'manual' | 'declared_empty';
+  uploaded_by?: string;
+  total_rows: number;
+  rows_flagged: number;
+  status: 'processing' | 'completed' | 'completed_with_flags';
+  created_at: string;
+  completed_at?: string;
+}
+
+export interface ManualOfflineSaleRow {
+  itemId: string;
+  batchNo: string;
+  quantity: number;
+  unitPrice: number;
+  transactionDate: string; // ISO string — mandatory, actual offline sale timestamp
+  refDocDate?: string;     // ISO string — optional, defaults to UTC date of transactionDate on backend
+  referenceNo?: string;
+  patientName: string;       // required — validated non-empty; raw name preserved in full_name_raw
+  patientExternalId?: string;
+  dispensedBy: string;       // required — physical person who handed over the medicine
+  paymentMode?: string;      // optional, defaults to 'Cash'
+}
+
+export interface FlaggedReconciliation {
+  id: string;
+  store_id: string;
+  item_id: string;
+  batch_no: string;
+  stock_out_quantity: number;
+  transaction_date: string;
+  reference_no?: string;
+  backlog_batch_id?: string;
+  created_by?: string;
+  created_at: string;
+  backlog_batch?: {
+    outage_started_at: string;
+    outage_ended_at: string;
+    outage_started_source?: string;
+  };
 }
 
 export const getCurrencySymbol = (code: string): string => {
@@ -1449,7 +1520,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     isDrugGeneric: r.is_drug_generic,
     isAntibiotic: r.is_antibiotic,
     isNarcotic: r.is_narcotic,
-    isActive: r.is_active,
+    isActive: r.is_active !== false,
   });
 
   const mapDrugMasterFromDb = (r: any): DrugMaster => ({
@@ -1458,7 +1529,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     itemCode: r.item_code,
     drugName: r.drug_name,
     genericId: r.generic_id,
-    isActive: r.is_active,
+    isActive: r.is_active !== false,
     dosageForm: r.dosage_form || undefined,
     packSize: r.pack_size !== undefined ? Number(r.pack_size) : 1,
     packUnit: r.pack_unit || 'tablets',
@@ -1813,6 +1884,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (loyaltyRedeemRulesRes && loyaltyRedeemRulesRes.data && loyaltyRedeemRulesRes.data.length > 0) {
           const r = loyaltyRedeemRulesRes.data[0];
           setLoyaltyRedemptionRules({
+            id: r.id,
             minPointsToRedeem: Number(r.min_points_to_redeem || 0),
             maxRedemptionPct: Number(r.max_redemption_pct || 0),
             maxPointsPerBill: Number(r.max_points_per_bill || 0),
@@ -2563,14 +2635,15 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                store:stores(*),
                item:inventory_items(*)
             `)
-            .eq('store_id', filters.storeId);
+            .eq('store_id', filters.storeId)
+            .order('transaction_date', { ascending: true });
             
          if (filters.fromDate) {
-             query = query.gte('ref_doc_date', `${filters.fromDate}T00:00:00.000Z`);
+             query = query.gte('transaction_date', `${filters.fromDate}T00:00:00.000Z`);
          }
          
          if (filters.toDate) {
-             query = query.lte('ref_doc_date', `${filters.toDate}T23:59:59.999Z`);
+             query = query.lte('transaction_date', `${filters.toDate}T23:59:59.999Z`);
          }
          
          const { data, error } = await query;
@@ -2599,6 +2672,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
              refType: r.ref_type,
              refDocNo: r.ref_doc_no,
              refDocDate: r.ref_doc_date,
+             transactionDate: r.transaction_date,
              stockInQuantity: r.stock_in_quantity,
              stockOutQuantity: r.stock_out_quantity,
              closingStock: r.closing_stock,
@@ -2775,16 +2849,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const logSubstitutions = async (logs: SubstitutionLogInput[]) => {
+  const logSubstitutions = async (logs: SubstitutionLogInput[], terminalId?: string) => {
     try {
       const token = await getAuthToken();
-      const res = await fetch(`${BACKEND_URL}/api/pharmacy/sales/substitution-log`, {
+      const res = await fetch(`${BACKEND_URL}/api/pharmacy/sales/gxp-substitution-log`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ logs })
+        body: JSON.stringify({ logs, terminalId })
       });
       return res.ok;
     } catch (err) {
@@ -5021,7 +5095,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const saveDrugMaster = async (mapping: DrugMaster): Promise<boolean> => {
       if (!requireDb()) return false;
-      const supabase = getSupabase();
       
       // Optimistic update
       setDrugMasters(prev => {
@@ -5031,23 +5104,20 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
 
       try {
-          const payload: any = {
-              item_id: mapping.itemId,
-              item_code: mapping.itemCode,
-              drug_name: mapping.drugName,
-              generic_id: mapping.genericId || null,
-              is_active: mapping.isActive,
-              dosage_form: mapping.dosageForm || 'tablet',
-              pack_size: mapping.packSize !== undefined ? Number(mapping.packSize) : 1.0,
-              pack_unit: mapping.packUnit || 'tablets',
-              substitutable: mapping.substitutable !== false,
-              margin_percent: mapping.marginPercent !== undefined ? Number(mapping.marginPercent) : 0.00,
-              cost_price: mapping.costPrice !== undefined ? Number(mapping.costPrice) : 0.00
-          };
-          if (mapping.id) payload.id = mapping.id;
+          const token = await getAuthToken();
+          const response = await fetch(`${BACKEND_URL}/api/pharmacy/drugs/master`, {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify(mapping)
+          });
 
-          const { error } = await supabase.from('pharmacy_drug_master').upsert(payload);
-          if (error) throw error;
+          if (!response.ok) {
+              const errData = await response.json();
+              throw new Error(errData.error || 'Failed to save drug master mapping');
+          }
           
           showToast('success', `Drug mapping for ${mapping.drugName} saved.`);
           return true;
@@ -5060,20 +5130,32 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const deleteDrugMaster = async (id: string): Promise<boolean> => {
       if (!requireDb()) return false;
-      const supabase = getSupabase();
       
       const original = drugMasters.find(dm => dm.id === id);
-      setDrugMasters(prev => prev.filter(dm => dm.id !== id));
+      // For GxP soft delete, update optimistic state of mapping: is_active = false
+      if (original) {
+          setDrugMasters(prev => prev.map(dm => dm.id === id ? { ...dm, isActive: false } : dm));
+      }
 
       try {
-          const { error } = await supabase.from('pharmacy_drug_master').delete().eq('id', id);
-          if (error) throw error;
+          const token = await getAuthToken();
+          const response = await fetch(`${BACKEND_URL}/api/pharmacy/drugs/master/${id}`, {
+              method: 'DELETE',
+              headers: {
+                  'Authorization': `Bearer ${token}`
+              }
+          });
+
+          if (!response.ok) {
+              const errData = await response.json();
+              throw new Error(errData.error || 'Failed to remove drug master mapping');
+          }
           
           showToast('info', 'Drug mapping removed.');
           return true;
       } catch (err: any) {
           showToast('error', `Failed to remove mapping: ${err.message}`);
-          if (original) setDrugMasters(prev => [...prev, original]);
+          if (original) setDrugMasters(prev => prev.map(dm => dm.id === id ? original : dm));
           return false;
       }
   };
@@ -7883,6 +7965,226 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  // -------------------------------------------------------
+  // Offline Continuity & Reconciliation State & Methods
+  // -------------------------------------------------------
+  const [activeStoreId, setActiveStoreId] = useState<string>('');
+  const [storeStatus, setStoreStatus] = useState<StoreStatus | null>(null);
+
+  // Persistent connectivity ping — writes to localStorage so the timestamp
+  // survives tab closures, browser crashes, or mid-outage page reloads.
+  useEffect(() => {
+    const PING_INTERVAL_MS = 30_000; // 30 seconds
+    const HEALTH_URL = `${BACKEND_URL}/api/pharmacy/health`;
+    const HEARTBEAT_URL = `${BACKEND_URL}/api/pharmacy/store-status/heartbeat`;
+
+    const ping = async () => {
+      try {
+        const token = await getAuthToken();
+        const cachedOfflineAt = window.localStorage.getItem('pharmacy_client_detected_offline_at');
+
+        let res;
+        if (activeStoreId) {
+          res = await fetch(HEARTBEAT_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: token ? `Bearer ${token}` : ''
+            },
+            body: JSON.stringify({
+              storeId: activeStoreId,
+              clientDetectedOfflineAt: cachedOfflineAt
+            })
+          });
+        } else {
+          res = await fetch(HEALTH_URL, {
+            method: 'GET',
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          });
+        }
+
+        if (res.ok) {
+          if (activeStoreId) {
+            const data = await res.json();
+            setStoreStatus({
+              store_id: activeStoreId,
+              status: data.status,
+              went_offline_at: data.went_offline_at,
+              went_offline_source: data.went_offline_source
+            });
+            if (cachedOfflineAt && (data.status === 'reconciliation_required' || data.status === 'live')) {
+              window.localStorage.removeItem('pharmacy_client_detected_offline_at');
+            }
+          }
+        } else {
+          throw new Error('Non-OK response');
+        }
+      } catch (err) {
+        if (!window.localStorage.getItem('pharmacy_client_detected_offline_at')) {
+          window.localStorage.setItem('pharmacy_client_detected_offline_at', new Date().toISOString());
+        }
+        if (activeStoreId) {
+          setStoreStatus({
+            store_id: activeStoreId,
+            status: 'offline',
+            went_offline_at: window.localStorage.getItem('pharmacy_client_detected_offline_at') || new Date().toISOString(),
+            went_offline_source: 'client_detected'
+          });
+        }
+      }
+    };
+
+    ping(); // immediate first ping
+    const intervalId = setInterval(ping, PING_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [activeStoreId]);
+
+  const fetchStoreStatus = async (storeId: string): Promise<StoreStatus | null> => {
+    try {
+      const token = await getAuthToken();
+      const res = await fetch(`${BACKEND_URL}/api/pharmacy/store-status/${storeId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) return null;
+      const data: StoreStatus = await res.json();
+      setStoreStatus(data);
+      return data;
+    } catch (err: any) {
+      console.error('fetchStoreStatus error:', err);
+      return null;
+    }
+  };
+
+  const declareOutageEmpty = async (storeId: string): Promise<boolean> => {
+    try {
+      const token = await getAuthToken();
+      const res = await fetch(`${BACKEND_URL}/api/pharmacy/reconciliation/declare-empty`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ storeId })
+      });
+      if (!res.ok) return false;
+      window.localStorage.removeItem('pharmacy_client_detected_offline_at');
+      await fetchStoreStatus(storeId);
+      return true;
+    } catch (err: any) {
+      console.error('declareOutageEmpty error:', err);
+      return false;
+    }
+  };
+
+  const uploadOfflineBacklogExcel = async (
+    storeId: string,
+    file: File
+  ): Promise<{ success: boolean; inserted: number; flagged: number; rows: any[] }> => {
+    try {
+      const token = await getAuthToken();
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('storeId', storeId);
+      const res = await fetch(`${BACKEND_URL}/api/pharmacy/reconciliation/upload-excel`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
+      });
+      const data = await res.json();
+      if (res.ok) {
+        window.localStorage.removeItem('pharmacy_client_detected_offline_at');
+        await fetchStoreStatus(storeId);
+        return { success: true, inserted: data.inserted, flagged: data.flagged, rows: data.rows };
+      }
+      return { success: false, inserted: 0, flagged: 0, rows: [] };
+    } catch (err: any) {
+      console.error('uploadOfflineBacklogExcel error:', err);
+      return { success: false, inserted: 0, flagged: 0, rows: [] };
+    }
+  };
+
+  const submitManualOfflineSale = async (
+    storeId: string,
+    saleRow: ManualOfflineSaleRow
+  ): Promise<{ success: boolean; flagged?: boolean; error?: string }> => {
+    try {
+      const token = await getAuthToken();
+      const res = await fetch(`${BACKEND_URL}/api/pharmacy/reconciliation/manual-entry`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          storeId,
+          itemId: saleRow.itemId,
+          batchNo: saleRow.batchNo,
+          quantity: saleRow.quantity,
+          unitPrice: saleRow.unitPrice,
+          transactionDate: saleRow.transactionDate,
+          refDocDate: saleRow.refDocDate || undefined,
+          referenceNo: saleRow.referenceNo,
+          patientName: saleRow.patientName,
+          patientExternalId: saleRow.patientExternalId || undefined,
+          dispensedBy: saleRow.dispensedBy,
+          paymentMode: saleRow.paymentMode || 'Cash'
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, error: data.error || 'Failed to submit manual entry' };
+      return { success: true, flagged: data.flagged };
+    } catch (err: any) {
+      console.error('submitManualOfflineSale error:', err);
+      return { success: false, error: err.message };
+    }
+  };
+
+  const fetchFlaggedReconciliations = async (storeId: string): Promise<FlaggedReconciliation[]> => {
+    try {
+      const token = await getAuthToken();
+      const res = await fetch(`${BACKEND_URL}/api/pharmacy/reconciliation/flagged?storeId=${storeId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.flagged || [];
+    } catch (err: any) {
+      console.error('fetchFlaggedReconciliations error:', err);
+      return [];
+    }
+  };
+
+  const resolveReconciliationFlag = async (
+    ledgerId: string,
+    resolution: string,
+    correctedBatchNo?: string
+  ): Promise<boolean> => {
+    try {
+      const token = await getAuthToken();
+      const res = await fetch(`${BACKEND_URL}/api/pharmacy/reconciliation/resolve-flag`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ledgerId, resolution, correctedBatchNo })
+      });
+      return res.ok;
+    } catch (err: any) {
+      console.error('resolveReconciliationFlag error:', err);
+      return false;
+    }
+  };
+
+  const completeManualReconciliation = async (storeId: string): Promise<boolean> => {
+    try {
+      const token = await getAuthToken();
+      const res = await fetch(`${BACKEND_URL}/api/pharmacy/reconciliation/complete-manual`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ storeId })
+      });
+      if (!res.ok) return false;
+      window.localStorage.removeItem('pharmacy_client_detected_offline_at');
+      await fetchStoreStatus(storeId);
+      return true;
+    } catch (err: any) {
+      console.error('completeManualReconciliation error:', err);
+      return false;
+    }
+  };
+
   return (
     <DataContext.Provider value={{
       user, login, loginDemo, logout,
@@ -7942,7 +8244,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       savePharmacyZone, deletePharmacyZone,
       savePharmacyRack, deletePharmacyRack,
       saveBatchLocation, deleteBatchLocation,
-      fetchBatchLocation, fetchStoreBatchLocations
+      fetchBatchLocation, fetchStoreBatchLocations,
+
+      // Offline Continuity & Reconciliation
+      storeStatus, setActiveStoreId, fetchStoreStatus, declareOutageEmpty,
+      uploadOfflineBacklogExcel, submitManualOfflineSale,
+      fetchFlaggedReconciliations, resolveReconciliationFlag, completeManualReconciliation
     }}>
       {children}
     </DataContext.Provider>

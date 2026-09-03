@@ -1450,6 +1450,68 @@ BEGIN
 END;
 $function$;
 
+-- ─── recalculate_stock_ledger_running_balances ───────────────
+CREATE OR REPLACE FUNCTION public.recalculate_stock_ledger_running_balances(
+  p_item_id uuid,
+  p_batch_no text,
+  p_store_id uuid,
+  p_from_date timestamp with time zone
+) RETURNS void AS $$
+DECLARE
+  v_row RECORD;
+  v_running_stock numeric := 0;
+  v_balance_before numeric := 0;
+BEGIN
+  -- To calculate the running stock correctly starting from p_from_date, we first get the sum of stock_in_quantity - stock_out_quantity before p_from_date
+  SELECT COALESCE(SUM(COALESCE(stock_in_quantity, 0) - COALESCE(stock_out_quantity, 0)), 0) INTO v_balance_before
+  FROM public.inventory_stock_ledger
+  WHERE item_id = p_item_id
+    AND batch_no = p_batch_no
+    AND store_id = p_store_id
+    AND transaction_date < p_from_date;
+
+  v_running_stock := v_balance_before;
+
+  FOR v_row IN
+    SELECT id, reconciliation_status, stock_in_quantity, stock_out_quantity, closing_stock_rate
+    FROM public.inventory_stock_ledger
+    WHERE store_id = p_store_id AND item_id = p_item_id
+    ORDER BY transaction_date ASC, created_at ASC
+  LOOP
+    v_running_stock := v_running_stock + COALESCE(r.stock_in_quantity, 0) - COALESCE(r.stock_out_quantity, 0);
+    
+    UPDATE public.inventory_stock_ledger
+    SET 
+      closing_stock = v_running_stock,
+      closing_stock_value = v_running_stock * COALESCE(r.closing_stock_rate, 0)
+    WHERE id = r.id;
+  END LOOP;
+END;
+$function$;
+
+-- ─── recalculate_ledger_trigger ──────────────────────────────
+CREATE OR REPLACE FUNCTION public.recalculate_ledger_trigger()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  IF pg_trigger_depth() > 1 THEN
+    RETURN NEW;
+  END IF;
+  
+  IF TG_OP = 'DELETE' THEN
+    PERFORM public.recalculate_stock_ledger_running_balances(OLD.store_id, OLD.item_id);
+    RETURN OLD;
+  ELSE
+    PERFORM public.recalculate_stock_ledger_running_balances(NEW.store_id, NEW.item_id);
+    IF TG_OP = 'UPDATE' AND (OLD.store_id <> NEW.store_id OR OLD.item_id <> NEW.item_id) THEN
+      PERFORM public.recalculate_stock_ledger_running_balances(OLD.store_id, OLD.item_id);
+    END IF;
+    RETURN NEW;
+  END IF;
+END;
+$function$;
+
 -- =============================================================
 -- SECTION 3: VIEWS
 -- =============================================================
@@ -1492,3 +1554,5 @@ CREATE TRIGGER bills_status_audit AFTER UPDATE ON public.bills FOR EACH ROW EXEC
 CREATE TRIGGER trg_no_nested_profiles BEFORE INSERT OR UPDATE ON public.lab_service_profile_components FOR EACH ROW EXECUTE FUNCTION check_no_nested_profiles();
 CREATE TRIGGER trg_lims_lab_order_on_billing AFTER UPDATE ON public.service_orders FOR EACH ROW EXECUTE FUNCTION trg_create_lims_lab_order_on_billing();
 CREATE TRIGGER trg_lims_lab_order_on_billing_insert AFTER INSERT ON public.service_orders FOR EACH ROW EXECUTE FUNCTION trg_create_lims_lab_order_on_billing_insert();
+CREATE TRIGGER trg_recalculate_ledger AFTER INSERT OR UPDATE OR DELETE ON public.inventory_stock_ledger FOR EACH ROW EXECUTE FUNCTION recalculate_ledger_trigger();
+

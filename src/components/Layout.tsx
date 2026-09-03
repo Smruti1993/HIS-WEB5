@@ -70,11 +70,13 @@ export const Layout = () => {
     '/pharmacy/masters/zones': 'PHARMACY_DASHBOARD',
     '/pharmacy/masters/racks': 'PHARMACY_DASHBOARD',
     '/pharmacy/masters/batch-locations': 'PHARMACY_DASHBOARD',
+    '/pharmacy/masters/substitution-audit': 'PHARMACY_DASHBOARD',
     '/pharmacy/direct-sale': 'PHARMACY_DASHBOARD',
     '/pharmacy/direct-sale-history': 'PHARMACY_DASHBOARD',
     '/pharmacy/op-pharmacy': 'PHARMACY_DASHBOARD',
     '/pharmacy/drug-return': 'PHARMACY_DASHBOARD',
     '/pharmacy/loyalty': 'PHARMACY_DASHBOARD',
+    '/pharmacy/reconciliation': 'PHARMACY_DASHBOARD',
 
     // Procurement
     '/procurement': 'PROCUREMENT_DASHBOARD',

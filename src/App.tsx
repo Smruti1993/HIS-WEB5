@@ -27,11 +27,13 @@ import { DrugMaster } from './components/pharmacy/masters/DrugMaster';
 import ZoneMaster from './components/pharmacy/masters/ZoneMaster';
 import RackMaster from './components/pharmacy/masters/RackMaster';
 import BatchLocations from './components/pharmacy/masters/BatchLocations';
+import { AuditTrailViewer } from './components/pharmacy/masters/AuditTrailViewer';
 import { DirectSale } from './components/pharmacy/DirectSale';
 import { OPPharmacy } from './pages/OPPharmacy';
 import { DrugReturn } from './pages/DrugReturn';
 import { DirectSaleHistory } from './components/pharmacy/DirectSaleHistory';
 import { Loyalty } from './pages/Loyalty';
+import { ReconciliationReview } from './components/pharmacy/ReconciliationReview';
 import { OrganizationMaster } from './pages/OrganizationMaster';
 import { PlanDefinition } from './pages/PlanDefinition';
 import { SponsorTariff } from './pages/SponsorTariff';
@@ -169,11 +171,13 @@ const AppRoutes = () => {
               <Route path="masters/zones" element={<ZoneMaster />} />
               <Route path="masters/racks" element={<RackMaster />} />
               <Route path="masters/batch-locations" element={<BatchLocations />} />
+              <Route path="masters/substitution-audit" element={<AuditTrailViewer />} />
               <Route path="direct-sale" element={<DirectSale />} />
               <Route path="direct-sale-history" element={<DirectSaleHistory />} />
               <Route path="op-pharmacy" element={<OPPharmacy />} />
               <Route path="drug-return" element={<DrugReturn />} />
               <Route path="loyalty" element={<Loyalty />} />
+              <Route path="reconciliation" element={<ReconciliationReview />} />
             </Route>
             <Route path="procurement">
               <Route index element={<Navigate to="vendor-master" replace />} />

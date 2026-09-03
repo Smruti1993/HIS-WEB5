@@ -78,6 +78,7 @@ export const NAV_ITEMS: NavItem[] = [
           { label: 'Zone Master',         path: '/pharmacy/masters/zones' },
           { label: 'Rack Master',         path: '/pharmacy/masters/racks' },
           { label: 'Batch Locations',     path: '/pharmacy/masters/batch-locations' },
+          { label: 'Substitution Audit',  path: '/pharmacy/masters/substitution-audit' },
         ]
       },
       {
@@ -104,6 +105,11 @@ export const NAV_ITEMS: NavItem[] = [
         label: 'Loyalty Portal',
         path: '/pharmacy/loyalty',
         icon: Award
+      },
+      {
+        label: 'Reconciliation',
+        path: '/pharmacy/reconciliation',
+        icon: Shield
       }
     ]
   },

@@ -608,6 +608,7 @@ export interface StockLedgerEntry {
   refType: string;
   refDocNo: string;
   refDocDate: string;
+  transactionDate?: string; // actual transaction date & time
   stockInQuantity: number;
   stockOutQuantity: number;
   closingStock: number;
@@ -766,12 +767,12 @@ export interface DrugMaster {
 }
 
 export interface SubstitutionLogInput {
-  saleId: string;
-  lineNo: number;
-  originalDrugId: string;
-  suggestedDrugIds: string[];
-  switchedToDrugId?: string;
+  sale_transaction_id: string;
+  original_drug_id: string;
+  suggested_drug_ids: string[];
+  switched_to_drug_id: string | null;
   action: 'kept' | 'switched' | 'dismissed';
+  remarks?: string;
 }
 
 export interface TaxMaster {

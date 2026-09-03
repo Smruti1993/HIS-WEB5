@@ -56,6 +56,12 @@ export const StockLedgerReport: React.FC = () => {
         return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
     };
 
+    const formatDateOnly = (dateString?: string) => {
+        if (!dateString) return '';
+        const d = new Date(dateString);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    };
+
     return (
         <div className="space-y-4">
             <div className="flex justify-between items-center bg-blue-600 px-4 py-3 text-white rounded-t-lg shadow-sm">
@@ -153,6 +159,7 @@ export const StockLedgerReport: React.FC = () => {
                                 <th className="p-2 border-r border-slate-300">Transaction Type</th>
                                 <th className="p-2 border-r border-slate-300">Ref Type</th>
                                 <th className="p-2 border-r border-slate-300">Ref Doc No.</th>
+                                <th className="p-2 border-r border-slate-300">Transaction Date</th>
                                 <th className="p-2 border-r border-slate-300">Ref Doc Date</th>
                                 <th className="p-2 border-r border-slate-300">Stock In Quantity</th>
                                 <th className="p-2 border-r border-slate-300">Stock Out Quantity</th>
@@ -167,9 +174,9 @@ export const StockLedgerReport: React.FC = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-200">
                             {!hasSearched ? (
-                                <tr><td colSpan={18} className="p-6 text-center text-slate-400 font-medium">Select a Store and click Search to view the report.</td></tr>
+                                <tr><td colSpan={19} className="p-6 text-center text-slate-400 font-medium">Select a Store and click Search to view the report.</td></tr>
                             ) : reportData.length === 0 ? (
-                                <tr><td colSpan={18} className="p-6 text-center text-slate-500 font-medium bg-slate-50">No stock movements found matching the criteria.</td></tr>
+                                <tr><td colSpan={19} className="p-6 text-center text-slate-500 font-medium bg-slate-50">No stock movements found matching the criteria.</td></tr>
                             ) : (
                                 reportData.map((row, idx) => (
                                     <tr key={row.id || idx} className="hover:bg-blue-50/50 transition-colors">
@@ -185,7 +192,8 @@ export const StockLedgerReport: React.FC = () => {
                                         </td>
                                         <td className="p-2 border-r border-slate-200 text-slate-500">{row.refType}</td>
                                         <td className="p-2 border-r border-slate-200 font-mono text-slate-500">{row.refDocNo}</td>
-                                        <td className="p-2 border-r border-slate-200 text-slate-500 text-right">{formatDateTime(row.refDocDate)}</td>
+                                        <td className="p-2 border-r border-slate-200 text-slate-500 text-right">{formatDateTime(row.transactionDate)}</td>
+                                        <td className="p-2 border-r border-slate-200 text-slate-500 text-right">{formatDateOnly(row.refDocDate)}</td>
                                         <td className="p-2 border-r border-slate-200 text-right font-medium text-green-600">{row.stockInQuantity > 0 ? row.stockInQuantity : ''}</td>
                                         <td className="p-2 border-r border-slate-200 text-right font-medium text-red-600">{row.stockOutQuantity > 0 ? row.stockOutQuantity : ''}</td>
                                         <td className="p-2 border-r border-slate-200 text-right font-bold text-slate-800">{row.closingStock}</td>

@@ -409,6 +409,67 @@ export default function LimsAcceptSample() {
     setRowsPerPage(10);
   };
 
+  // Grouped Samples for rendering (collapses profile components or duplicate tubes under the same sample_no)
+  const groupedSamples = React.useMemo(() => {
+    const groups: { [key: string]: any } = {};
+    
+    samples.forEach(s => {
+      const key = s.sample_no || s.id;
+      
+      const patient = (s.lab_order?.service_order?.appointment?.patient || {}) as any;
+      const patientName = `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'Walk-in';
+      const patientId = patient.id || 'N/A';
+      
+      const testName = s.lab_order?.service?.name || s.lab_order?.service_order?.service_name || 'Lab Service';
+      
+      if (!groups[key]) {
+        const consultingDoctor = s.lab_order?.service_order?.appointment?.doctor
+          ? `Dr. ${s.lab_order.service_order.appointment.doctor.first_name} ${s.lab_order.service_order.appointment.doctor.last_name || ''}`.trim()
+          : '—';
+
+        const orderedDoctor = s.lab_order?.service_order?.ordering_doctor
+          ? `Dr. ${s.lab_order.service_order.ordering_doctor.first_name} ${s.lab_order.service_order.ordering_doctor.last_name || ''}`.trim()
+          : '—';
+
+        const visitType = s.lab_order?.service_order?.appointment?.visit_type || 'Direct Billing';
+
+        groups[key] = {
+          sample_no: key,
+          patientName,
+          patientId,
+          patient,
+          visitType,
+          consultingDoctor,
+          orderedDoctor,
+          specimen: s.specimen,
+          container: s.container,
+          section: s.section || s.lab_order?.lab_section || 'Dental',
+          labOrderBarcode: s.lab_order?.barcode_no || '',
+          testNames: testName,
+          rawSampleIds: [s.id],
+          rawSamples: [s]
+        };
+      } else {
+        if (!groups[key].testNames.toLowerCase().includes(testName.toLowerCase())) {
+          groups[key].testNames += `, ${testName}`;
+        }
+        groups[key].rawSampleIds.push(s.id);
+        groups[key].rawSamples.push(s);
+      }
+    });
+    
+    return Object.values(groups);
+  }, [samples]);
+
+  const isRowSelected = (group: any) => {
+    return group.rawSampleIds.every((id: string) => selectedSampleIds.includes(id));
+  };
+
+  const isRowPartiallySelected = (group: any) => {
+    const selectedCount = group.rawSampleIds.filter((id: string) => selectedSampleIds.includes(id)).length;
+    return selectedCount > 0 && selectedCount < group.rawSampleIds.length;
+  };
+
   // Selection Checkboxes
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -418,10 +479,23 @@ export default function LimsAcceptSample() {
     }
   };
 
-  const handleSelectRow = (id: string) => {
-    setSelectedSampleIds(prev => 
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
+  const handleSelectRow = (sampleNo: string) => {
+    const group = groupedSamples.find(g => g.sample_no === sampleNo);
+    if (!group) return;
+    
+    const allSelected = isRowSelected(group);
+    
+    if (allSelected) {
+      setSelectedSampleIds(prev => prev.filter(id => !group.rawSampleIds.includes(id)));
+    } else {
+      setSelectedSampleIds(prev => {
+        const next = [...prev];
+        group.rawSampleIds.forEach((id: string) => {
+          if (!next.includes(id)) next.push(id);
+        });
+        return next;
+      });
+    }
   };
 
   // Barcode Submission (Auto-checks/searches)
@@ -768,7 +842,7 @@ export default function LimsAcceptSample() {
     );
   };
 
-  const visibleSamples = samples.slice(0, rowsPerPage);
+  const visibleGroupedSamples = groupedSamples.slice(0, rowsPerPage);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -1015,11 +1089,11 @@ export default function LimsAcceptSample() {
         <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/40 flex items-center justify-between flex-wrap gap-4 shrink-0">
           <div className="flex items-center gap-3">
             <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#1C58D9]">
-              {samples.length} sample{samples.length !== 1 && 's'} found
+              {groupedSamples.length} sample{groupedSamples.length !== 1 && 's'} found
             </span>
             {selectedSampleIds.length > 0 && (
               <span className="bg-[#1C58D9] text-white text-[10px] px-2.5 py-0.5 rounded-full font-bold select-none">
-                {selectedSampleIds.length} Selected
+                {groupedSamples.filter(g => g.rawSampleIds.some((id: string) => selectedSampleIds.includes(id))).length} Selected
               </span>
             )}
             <span className="bg-blue-50 text-[#1C58D9] text-[9px] border border-blue-200 px-3 py-1 rounded-full font-bold uppercase tracking-wider select-none">
@@ -1059,7 +1133,7 @@ export default function LimsAcceptSample() {
               <FlaskConical className="w-10 h-10 text-[#1C58D9] animate-bounce" />
               <span className="text-xs font-semibold">Loading accession queue...</span>
             </div>
-          ) : samples.length === 0 ? (
+          ) : groupedSamples.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-80 text-slate-400">
               <ClipboardList className="w-12 h-12 opacity-30 mb-2" />
               <span className="text-xs font-bold">NO SAMPLES PENDING ACCESSION</span>
@@ -1072,7 +1146,14 @@ export default function LimsAcceptSample() {
                   <th className="py-3 px-4 text-center w-12 select-none">
                     <input 
                       type="checkbox"
-                      checked={samples.length > 0 && selectedSampleIds.length === samples.length}
+                      checked={groupedSamples.length > 0 && groupedSamples.every(isRowSelected)}
+                      ref={el => {
+                        if (el) {
+                          const allSelected = groupedSamples.every(isRowSelected);
+                          const noneSelected = groupedSamples.every(g => !g.rawSampleIds.some((id: string) => selectedSampleIds.includes(id)));
+                          el.indeterminate = !allSelected && !noneSelected;
+                        }
+                      }}
                       onChange={handleSelectAll}
                       className="w-4 h-4 rounded border-slate-350 text-[#1C58D9] accent-[#1C58D9] cursor-pointer"
                     />
@@ -1086,27 +1167,20 @@ export default function LimsAcceptSample() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {visibleSamples.map(item => {
-                  const patient = (item.lab_order?.service_order?.appointment?.patient || {}) as any;
-                  const patientName = `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'Walk-in';
+                {visibleGroupedSamples.map(group => {
+                  const patient = group.patient || {};
+                  const patientName = group.patientName;
                   const age = patient.dob
                     ? `${Math.floor((Date.now() - new Date(patient.dob).getTime()) / (365.25 * 24 * 60 * 60 * 1000))} Y`
                     : '—';
 
-                  const isSelected = selectedSampleIds.includes(item.id);
-
-                  const consultingDoctor = item.lab_order?.service_order?.appointment?.doctor
-                    ? `Dr. ${item.lab_order.service_order.appointment.doctor.first_name} ${item.lab_order.service_order.appointment.doctor.last_name || ''}`.trim()
-                    : '—';
-
-                  const orderedDoctor = item.lab_order?.service_order?.ordering_doctor
-                    ? `Dr. ${item.lab_order.service_order.ordering_doctor.first_name} ${item.lab_order.service_order.ordering_doctor.last_name || ''}`.trim()
-                    : '—';
+                  const isSelected = isRowSelected(group);
+                  const isPartial = isRowPartiallySelected(group);
 
                   return (
                     <tr 
-                      key={item.id}
-                      onClick={() => handleSelectRow(item.id)}
+                      key={group.sample_no}
+                      onClick={() => handleSelectRow(group.sample_no)}
                       className={`hover:bg-slate-50/50 transition-colors cursor-pointer select-none ${
                         isSelected ? 'bg-blue-50/20' : ''
                       }`}
@@ -1116,7 +1190,10 @@ export default function LimsAcceptSample() {
                         <input 
                           type="checkbox"
                           checked={isSelected}
-                          onChange={() => handleSelectRow(item.id)}
+                          ref={el => {
+                            if (el) el.indeterminate = isPartial;
+                          }}
+                          onChange={() => handleSelectRow(group.sample_no)}
                           className="w-4 h-4 rounded border-slate-350 text-[#1C58D9] accent-[#1C58D9] cursor-pointer"
                         />
                       </td>
@@ -1129,34 +1206,34 @@ export default function LimsAcceptSample() {
                             {patient.gender?.toUpperCase() || 'MALE'} · {patient.dob} ({age})
                           </span>
                           <span className="text-[9px] font-mono text-[#1C58D9] font-bold flex items-center gap-1.5 mt-0.5">
-                            MRN: {patient.id || 'N/A'}
+                            MRN: {group.patientId}
                           </span>
                           <span className="text-[9px] text-slate-450 font-normal flex items-center gap-1 mt-0.5">
                             <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                            {item.lab_order?.service_order?.appointment?.visit_type || 'Direct Billing'}
+                            {group.visitType}
                           </span>
                           <span className="text-[10px] text-slate-700 font-extrabold mt-1 border-t border-slate-100 pt-1">
-                            {(item.lab_order?.service?.name || item.lab_order?.service_order?.service_name || 'Lab Service')}
+                            {group.testNames}
                           </span>
                         </div>
                       </td>
 
                       {/* Consulting Doctor */}
                       <td className="py-4 px-4 text-slate-600 font-bold">
-                        {consultingDoctor}
+                        {group.consultingDoctor}
                       </td>
 
                       {/* Ordered Doctor */}
                       <td className="py-4 px-4 text-slate-500 font-semibold">
-                        {orderedDoctor}
+                        {group.orderedDoctor}
                       </td>
 
                       {/* Specimen capped details */}
                       <td className="py-4 px-4" onClick={e => e.stopPropagation()}>
                         <div className="flex flex-col items-center justify-center gap-1">
-                          <TestTubeIcon color={item.container?.name || 'Red'} />
-                          <span className={`px-2 py-0.5 border text-[9px] font-extrabold rounded-full ${getContainerStyle(item.container?.name || 'Red')}`}>
-                            {item.specimen?.name || 'SERUM'}
+                          <TestTubeIcon color={group.container?.name || 'Red'} />
+                          <span className={`px-2 py-0.5 border text-[9px] font-extrabold rounded-full ${getContainerStyle(group.container?.name || 'Red')}`}>
+                            {group.specimen?.name || 'SERUM'}
                           </span>
                         </div>
                       </td>
@@ -1165,10 +1242,10 @@ export default function LimsAcceptSample() {
                       <td className="py-4 px-4 text-center font-mono" onClick={e => e.stopPropagation()}>
                         <div className="flex flex-col items-center justify-center gap-1">
                           <span className="text-slate-900 font-extrabold text-[12px] tracking-wide">
-                            {item.sample_no}
+                            {group.sample_no}
                           </span>
                           <span className="text-[9px] text-slate-400 font-semibold select-none">
-                            PSNO-{item.lab_order?.barcode_no?.replace('BAR-', '') || '00000'}
+                            PSNO-{group.labOrderBarcode.replace('BAR-', '') || '00000'}
                           </span>
                         </div>
                       </td>
@@ -1177,7 +1254,7 @@ export default function LimsAcceptSample() {
                       <td className="py-4 px-4 font-semibold text-slate-700">
                         <span className="bg-slate-100 border border-slate-200 text-slate-600 px-2 py-0.5 rounded text-[10px]">
                           {(() => {
-                            const raw = item.section || item.lab_order?.lab_section || 'Dental';
+                            const raw = group.section;
                             const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw);
                             if (isUuid) {
                               const sc = serviceCentres.find(s => s.id === raw);
@@ -1203,7 +1280,14 @@ export default function LimsAcceptSample() {
             <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer select-none">
               <input 
                 type="checkbox"
-                checked={samples.length > 0 && selectedSampleIds.length === samples.length}
+                checked={groupedSamples.length > 0 && groupedSamples.every(isRowSelected)}
+                ref={el => {
+                  if (el) {
+                    const allSelected = groupedSamples.every(isRowSelected);
+                    const noneSelected = groupedSamples.every(g => !g.rawSampleIds.some((id: string) => selectedSampleIds.includes(id)));
+                    el.indeterminate = !allSelected && !noneSelected;
+                  }
+                }}
                 onChange={handleSelectAll}
                 className="w-4 h-4 rounded border-slate-350 text-[#1C58D9] accent-[#1C58D9] cursor-pointer"
               />
@@ -1236,7 +1320,7 @@ export default function LimsAcceptSample() {
           </div>
 
           <div className="text-xs font-bold text-slate-500 select-none">
-            {selectedSampleIds.length} sample{selectedSampleIds.length !== 1 && 's'} selected · Ready to accept or reject
+            {groupedSamples.filter(g => g.rawSampleIds.some((id: string) => selectedSampleIds.includes(id))).length} sample{groupedSamples.filter(g => g.rawSampleIds.some((id: string) => selectedSampleIds.includes(id))).length !== 1 && 's'} selected · Ready to accept or reject
           </div>
         </div>
       </div>
