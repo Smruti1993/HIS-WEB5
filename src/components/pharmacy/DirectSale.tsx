@@ -11,6 +11,8 @@ import { DirectSaleInvoiceReport } from './DirectSaleInvoiceReport';
 import { getSupabase } from '../../services/supabaseClient';
 import { playSuccessBeep, playErrorBeep } from '../../utils/audio';
 import { sendInvoicePdf } from '../../services/whatsappService';
+import { PosPaymentModal } from './PosPaymentModal';
+import { posApi } from '../../services/posPaymentApi';
 
 const INITIAL_PATIENT = {
   firstName: '',
@@ -31,7 +33,7 @@ const INITIAL_PATIENT = {
 
 export const DirectSale: React.FC = () => {
   const { 
-    stores, inventoryItems, storeItemMappings, saveDirectSale, completeDirectSalePayment, fetchBatchDetails,
+    stores, inventoryItems, storeItemMappings, saveDirectSale, completeDirectSalePayment, completeDirectSalePaymentStrict, fetchBatchDetails,
     fetchBatchLocation,
     itemTaxMappings, taxMasters, formatCurrency, selectedCurrency, saveInventoryItem, showToast,
     enrollOrFetchLoyaltyAccount, calculateLoyaltyRedemption, processLoyaltyTransaction,
@@ -66,6 +68,31 @@ export const DirectSale: React.FC = () => {
   const [upiOrderId, setUpiOrderId] = useState('');
   const [pendingSaleNo, setPendingSaleNo] = useState('');
   const [pendingSale, setPendingSale] = useState<DirectSaleType | null>(null);
+
+  // PayU POS Terminal Payment State
+  const [posPayment, setPosPayment] = useState<{
+    saleId: string;
+    method: 'card' | 'upi';
+    savedSale: DirectSaleType;
+  } | null>(null);
+  const [posError, setPosError] = useState<string | null>(null);
+  const [existingPendingSaleId, setExistingPendingSaleId] = useState<string | null>(null);
+  const [awaitingSales, setAwaitingSales] = useState<any[]>([]);
+
+  const isPaymentInProgress = posPayment !== null || posError !== null || loading;
+
+  const loadAwaitingSales = async () => {
+    try {
+      const data = await posApi('/api/pharmacy/payments/awaiting-completion');
+      setAwaitingSales(data.items || []);
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    loadAwaitingSales();
+  }, []);
 
   // Discount state
   const [discountPercentage, setDiscountPercentage] = useState(0);
@@ -446,6 +473,9 @@ export const DirectSale: React.FC = () => {
       setLastDispensedSale(mappedSale);
       setShowUpiModal(false);
       setPendingSale(null);
+    setExistingPendingSaleId(null);
+    setPosPayment(null);
+    setPosError(null);
       setPendingSaleNo('');
       submitSubstitutionLogs(mappedSale.invoiceNo || mappedSale.saleNo);
     }
@@ -1042,15 +1072,7 @@ export const DirectSale: React.FC = () => {
     setSubstitutionAudit({});
   };
 
-  const loadRazorpayScript = () => {
-    return new Promise((resolve) => {
-      const script = document.createElement("script");
-      script.src = "https://checkout.razorpay.com/v1/checkout.js";
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
-    });
-  };
+
 
   const handleDispense = async () => {
     if (currentStoreStatus !== 'live') {
@@ -1067,102 +1089,108 @@ export const DirectSale: React.FC = () => {
     if (paymentMode === 'UPI' || paymentMode === 'Card') {
       setLoading(true);
       setError('');
-      
-      const loaded = await loadRazorpayScript();
-      if (!loaded) {
-        setError("Failed to load Razorpay Checkout SDK.");
-        setLoading(false);
-        return;
-      }
 
-      // 1. Create sale payload in 'pending' status
-      const salePayload: DirectSaleType = {
-        ...patient,
-        saleNo,
-        saleDate: new Date().toISOString(),
-        storeId: selectedStore,
-        totalAmount: totalSaleAmount,
-        discountPercentage,
-        discountAmount,
-        items: items,
-        paymentMode,
-        paymentStatus: 'pending'
-      };
+      let savedSaleResult: DirectSaleType | null = null;
 
-      // 2. Save to database in pending status
-      const result = await saveDirectSale(salePayload);
-      if (!result.success || !result.savedSale) {
-        setError("Failed to register direct sale entry in database.");
-        setLoading(false);
-        return;
-      }
-
-      // 3. Configure Razorpay options
-      const orderId = `order_UPI${Date.now().toString().slice(-6)}`;
-      setUpiOrderId(orderId);
-      setPendingSale(salePayload);
-      setPendingSaleNo(saleNo);
-      // @ts-ignore
-      const rawRzpKey = import.meta.env.VITE_RAZORPAY_KEY_ID || "rzp_test_51b4HIs73b";
-      const rzpKey = typeof rawRzpKey === 'string' ? rawRzpKey.trim() : rawRzpKey;
-      console.log("Razorpay Key ID used:", rzpKey, "Length:", rzpKey.length);
-
-      const inrRate = getExchangeRateToINR(selectedCurrency);
-      const amountInPaise = Math.round(totalSaleAmount * 100 * inrRate);
-      if (amountInPaise < 100) {
-        setError("Total payable amount must be at least ₹1.00 (100 Paise) to initialize Razorpay checkout.");
-        setLoading(false);
-        return;
-      }
-      const cleanContact = (patient.phoneNo || "").replace(/\D/g, "");
-      const finalContact = cleanContact.length >= 10 ? cleanContact.slice(-10) : "9999999999";
-
-      const cleanPatientName = `${patient.firstName} ${patient.lastName || ""}`.trim().replace(/[^a-zA-Z0-9 ]/g, "");
-      const cleanDescription = `Direct Sale Invoice ${result.savedSale.invoiceNo || saleNo}`.replace(/[^a-zA-Z0-9\- ]/g, "");
-
-      console.log("Razorpay Amount (Paise):", amountInPaise);
-      console.log("Razorpay Prefill Contact:", finalContact);
-      console.log("Razorpay Clean Patient Name:", cleanPatientName);
-
-      const options = {
-        key: rzpKey, 
-        amount: amountInPaise, 
-        currency: "INR",
-        name: "MediCore HMS Pharmacy",
-        description: cleanDescription,
-        prefill: {
-          name: cleanPatientName,
-          contact: finalContact
-        },
-        notes: {
-          saleNo: saleNo,
-          patientName: cleanPatientName
-        },
-        handler: async function (response: any) {
-          console.log("Client-side payment callback: ", response.razorpay_payment_id);
-          await handlePaymentCompletion(salePayload, response.razorpay_payment_id, response.razorpay_order_id || '');
-        },
-        modal: {
-          ondismiss: function () {
-            setLoading(false);
-            setPendingSale(null);
-            setPendingSaleNo('');
-          }
+      if (existingPendingSaleId) {
+        // Guard against updating while a transaction is active
+        const activeCheck = await posApi(`/api/pharmacy/sales/${existingPendingSaleId}/active-payment`).catch(() => ({ active: false }));
+        if (activeCheck.active) {
+          setError('A terminal transaction is currently active or awaiting completion for this pending sale. Please wait or resolve it before modifying.');
+          setLoading(false);
+          return;
         }
-      };
 
-      const rzp = new (window as any).Razorpay(options);
-      rzp.open();
-      
-      if (paymentMode === 'UPI') {
-        const inrRate = getExchangeRateToINR(selectedCurrency);
-        const link = `upi://pay?pa=medicorepharmacy@hdfcbank&pn=MediCore%20Pharmacy&tr=${orderId}&am=${(totalSaleAmount * inrRate).toFixed(2)}&cu=INR&tn=Bill-${saleNo}`;
-        setUpiLink(link);
-        setShowUpiModal(true);
+        // Reuse existing pending sale: update header and replace items
+        const supabase = getSupabase();
+        const { error: updErr } = await supabase.from('pharmacy_direct_sales').update({
+          total_amount: totalSaleAmount,
+          discount_percentage: discountPercentage,
+          discount_amount: discountAmount,
+          payment_mode: paymentMode,
+          first_name: patient.firstName,
+          middle_name: patient.middleName || null,
+          last_name: patient.lastName || null,
+          phone_no: patient.phoneNo || null,
+          external_no: patient.externalNo || 'CASH',
+          referred_doctor: patient.referredDoctor || null
+        }).eq('id', existingPendingSaleId);
+
+        if (updErr) {
+          setError('Failed to update pending sale in database: ' + updErr.message);
+          setLoading(false);
+          return;
+        }
+
+        await supabase.from('pharmacy_direct_sale_items').delete().eq('sale_id', existingPendingSaleId);
+
+        const newDbItems = items.map(i => ({
+          sale_id: existingPendingSaleId,
+          item_id: i.itemId,
+          batch_no: i.batchNo,
+          batch_date: (i as any).batchDate || null,
+          unit: i.unit || null,
+          quantity: i.quantity,
+          unit_price: i.unitPrice,
+          total_price: Number((i.quantity * i.unitPrice).toFixed(2)),
+          tax_percentage: i.taxPercentage || 0,
+          tax_amount: i.taxAmount || 0,
+          expiry_date: i.expiryDate || null
+        }));
+        await supabase.from('pharmacy_direct_sale_items').insert(newDbItems);
+
+        savedSaleResult = {
+          ...patient,
+          id: existingPendingSaleId,
+          saleNo,
+          saleDate: new Date().toISOString(),
+          storeId: selectedStore,
+          totalAmount: totalSaleAmount,
+          discountPercentage,
+          discountAmount,
+          items,
+          paymentMode,
+          paymentStatus: 'pending'
+        };
+      } else {
+        const salePayload: DirectSaleType = {
+          ...patient,
+          saleNo,
+          saleDate: new Date().toISOString(),
+          storeId: selectedStore,
+          totalAmount: totalSaleAmount,
+          discountPercentage,
+          discountAmount,
+          items: items,
+          paymentMode,
+          paymentStatus: 'pending'
+        };
+
+        const result = await saveDirectSale(salePayload);
+        if (!result.success || !result.savedSale?.id) {
+          setError('Failed to register pending sale in database.');
+          setLoading(false);
+          return;
+        }
+        savedSaleResult = result.savedSale;
+        setExistingPendingSaleId(result.savedSale.id);
       }
-      
+
       setLoading(false);
+      setPosPayment({
+        saleId: savedSaleResult.id!,
+        method: paymentMode === 'Card' ? 'card' : 'upi',
+        savedSale: savedSaleResult,
+      });
       return;
+    }
+
+    if (existingPendingSaleId) {
+      const activeCheck = await posApi(`/api/pharmacy/sales/${existingPendingSaleId}/active-payment`).catch(() => ({ active: false }));
+      if (activeCheck.active) {
+        setError('Cannot complete in cash: A terminal transaction is currently active or awaiting completion for this pending sale.');
+        return;
+      }
     }
 
     setLoading(true);
@@ -1246,7 +1274,7 @@ export const DirectSale: React.FC = () => {
         <div className="flex items-center gap-2">
            <button 
              onClick={handleDispense}
-             disabled={loading}
+             disabled={loading || isPaymentInProgress}
              className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-all disabled:opacity-50"
            >
              {loading ? <Save className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -1256,6 +1284,56 @@ export const DirectSale: React.FC = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-4 pb-4 pr-1">
+        {/* Awaiting Completion Recovery Banner */}
+        {awaitingSales.length > 0 && (
+          <div className="mx-1 p-3 rounded-xl bg-amber-500 text-white flex items-center justify-between text-xs font-bold shadow-md animate-in fade-in slide-in-from-top-2">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-white" />
+              <span>⚠️ {awaitingSales.length} paid terminal sale(s) awaiting completion.</span>
+            </div>
+            <button
+              onClick={async () => {
+                setLoading(true);
+                for (const item of awaitingSales) {
+                  try {
+                    const claim = await posApi(`/api/pharmacy/sales/${item.sale_id}/claim-completion`, { method: 'POST' });
+                    if (claim.claimed) {
+                      await completeDirectSalePaymentStrict({ saleNo: item.pharmacy_direct_sales.sale_no } as any, item.txn_id, item.bank_ref_no || item.txn_id);
+                    }
+                  } catch (e) {
+                    console.error('Error recovering sale:', e);
+                  }
+                }
+                await loadAwaitingSales();
+                setLoading(false);
+                showToast('success', 'Recovery process completed.');
+              }}
+              disabled={loading}
+              className="px-3 py-1 bg-white text-amber-700 rounded-lg hover:bg-amber-50 font-bold transition-all disabled:opacity-50"
+            >
+              Complete Now
+            </button>
+          </div>
+        )}
+
+        {/* Supervisor Escalation Banner */}
+        {posError && (
+          <div className="mx-1 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start justify-between text-xs font-semibold shadow-sm animate-in fade-in">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-rose-900">Escalated to Supervisor Review</p>
+                <p className="mt-1 text-rose-700">{posError}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setPosError(null)}
+              className="text-xs font-bold text-rose-600 hover:text-rose-800 px-2 py-1 bg-white rounded border border-rose-200"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {/* ---- OFFLINE STATUS BANNERS (inside scroll container so button is always reachable) ---- */}
         {selectedStore && currentStoreStatus === 'offline' && (
@@ -2407,6 +2485,89 @@ export const DirectSale: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    
+      {/* PayU POS Terminal Payment Modal */}
+      {posPayment && (
+        <PosPaymentModal
+          saleId={posPayment.saleId}
+          storeId={posPayment.savedSale.storeId}
+          paymentMethod={posPayment.method}
+          onClose={() => setPosPayment(null)}
+          onSuccess={async ({ txnId, bankRef }) => {
+            const activeSale = posPayment.savedSale;
+            const refNumber = bankRef || txnId;
+            try {
+              const claim = await posApi(`/api/pharmacy/sales/${activeSale.id}/claim-completion`, { method: 'POST' });
+
+              if (claim.claimed) {
+                try {
+                  await completeDirectSalePaymentStrict(activeSale, txnId, refNumber);
+                } catch (e: any) {
+                  await posApi(`/api/pharmacy/sales/${activeSale.id}/release-completion`, { method: 'POST' }).catch(() => {});
+                  await posApi(`/api/pharmacy/sales/${activeSale.id}/mark-needs-review`, {
+                    method: 'POST',
+                    body: JSON.stringify({ txnId, reason: e?.message || 'Stock deduction failed' })
+                  }).catch(() => {});
+                  throw e;
+                }
+              } else {
+                // Poll payment-status to check if another tab completed it
+                let isDone = false;
+                for (let i = 0; i < 5; i++) {
+                  await new Promise(r => setTimeout(r, 1000));
+                  const s = await posApi(`/api/pharmacy/sales/${activeSale.id}/payment-status`);
+                  if (s.saleCompleted) { isDone = true; break; }
+                }
+                if (!isDone) {
+                  setPosPayment(null);
+                  showToast('info', 'Payment recorded. Dispensing is being completed in another active session.');
+                  return;
+                }
+              }
+
+              setPosPayment(null);
+              setExistingPendingSaleId(null);
+              setReferenceNo(refNumber);
+
+              // Re-fetch updated sale record from DB
+              const supabase = getSupabase();
+              const { data: dbData } = await supabase
+                .from('pharmacy_direct_sales')
+                .select('*, items:pharmacy_direct_sale_items(*)')
+                .eq('id', activeSale.id)
+                .single();
+
+              const finalSale: DirectSaleType = dbData ? {
+                ...activeSale,
+                id: dbData.id,
+                saleNo: dbData.sale_no,
+                invoiceNo: dbData.invoice_no,
+                receiptNo: dbData.receipt_no,
+                paymentStatus: dbData.payment_status || 'paid',
+                referenceNo: refNumber
+              } : {
+                ...activeSale,
+                paymentStatus: 'paid',
+                referenceNo: refNumber
+              };
+
+              setLastDispensedSale(finalSale);
+              setItems([]);
+              setPatient(INITIAL_PATIENT);
+              showToast('success', `Payment completed. Ref: ${refNumber}`);
+              if (finalSale.invoiceNo || finalSale.saleNo) {
+                submitSubstitutionLogs(finalSale.invoiceNo || finalSale.saleNo);
+              }
+            } catch (e: any) {
+              setPosPayment(null);
+              setPosError(
+                `Payment was captured on terminal (Ref: ${refNumber}) but local stock deduction failed: ${e?.message ?? e}. ` +
+                `DO NOT CHARGE AGAIN. This transaction is escalated to Supervisor Review.`
+              );
+            }
+          }}
+        />
+      )}
+</div>
   );
 };

@@ -223,6 +223,7 @@ interface DataContextType {
   deleteCurrency: (id: string) => Promise<boolean>;
   formatCurrency: (amount: number | string) => string;
   completeDirectSalePayment: (sale: DirectSale, paymentId: string, orderId: string) => Promise<boolean>;
+  completeDirectSalePaymentStrict: (sale: DirectSale, paymentId: string, orderId: string) => Promise<void>;
   patientRefunds: PatientRefund[];
   processPatientRefund: (patientId: string, itemsList: Array<{ type: 'Return' | 'ServiceInvoice', id: string, amount: number }>, totalAmount: number, remarks: string) => Promise<{ success: boolean; refundNo?: string }>;
 
@@ -2876,18 +2877,25 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const storeCode = store ? store.storeCode : 'DS';
       const year = new Date().getFullYear().toString().slice(-2); // e.g. "26"
       
-      // Get sequential counter
-      const { count, error: countError } = await supabase
-        .from('pharmacy_direct_sales')
-        .select('*', { count: 'exact', head: true });
-      
-      if (countError) throw countError;
-      
-      const seq = (count !== null ? count + 1 : 1).toString().padStart(6, '0');
-      const invoiceNo = `INV-D-${storeCode}-${year}${seq}`;
-      
-      const rcpSeq = (count !== null ? count + 1 : 1).toString().padStart(8, '0');
-      const receiptNo = `RCP-${year}${rcpSeq}`;
+      // Only generate invoice_no and receipt_no if sale is marked 'paid'
+      const isPaid = (sale.paymentStatus || 'paid') === 'paid';
+      let invoiceNo: string | null = null;
+      let receiptNo: string | null = null;
+
+      if (isPaid) {
+        const { count, error: countError } = await supabase
+          .from('pharmacy_direct_sales')
+          .select('id', { count: 'exact', head: true })
+          .not('invoice_no', 'is', null);
+
+        if (countError) throw countError;
+
+        const seq = (count !== null ? count + 1 : 1).toString().padStart(6, '0');
+        invoiceNo = `INV-D-${storeCode}-${year}${seq}`;
+
+        const rcpSeq = (count !== null ? count + 1 : 1).toString().padStart(8, '0');
+        receiptNo = `RCP-${year}${rcpSeq}`;
+      }
 
       // 1. Save Sale Header
       const dbSale = {
@@ -2941,6 +2949,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           sale_id: saleId,
           item_id: i.itemId,
           batch_no: i.batchNo,
+          batch_date: i.batchDate || null,
+          unit: i.unit || null,
           quantity: i.quantity,
           unit_price: i.unitPrice,
           tax_percentage: taxPercent,
@@ -2961,8 +2971,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const savedDirectSale: DirectSale = {
         ...sale,
         id: saleId,
-        invoiceNo: invoiceNo,
-        receiptNo: receiptNo,
+        invoiceNo: invoiceNo || undefined,
+        receiptNo: receiptNo || undefined,
         taxAmount: totalTaxAmount,
         items: sale.items.map((item, idx) => {
           const dbItem = dbItems[idx];
@@ -3082,7 +3092,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!requireDb()) return [];
     try {
       const supabase = getSupabase();
-      let query = supabase.from('pharmacy_direct_sales').select('*, items:pharmacy_direct_sale_items(*)').order('sale_date', { ascending: false });
+      let query = supabase.from('pharmacy_direct_sales').select('*, items:pharmacy_direct_sale_items(*)').eq('payment_status', 'paid').order('sale_date', { ascending: false });
       
       if (filters?.storeId) {
         query = query.eq('store_id', filters.storeId);
@@ -3156,7 +3166,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const supabase = getSupabase();
 
-      // 1. Retrieve the existing sale header from the DB to verify it exists
+      // 1. Retrieve the existing sale header and items from DB
       const { data: dbSale, error: fetchError } = await supabase
         .from('pharmacy_direct_sales')
         .select('*, items:pharmacy_direct_sale_items(*)')
@@ -3167,16 +3177,153 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         throw new Error(fetchError?.message || 'Sale record not found.');
       }
 
-      // If already paid, return true to avoid duplicate processing
+      // 2. Early return if already paid (idempotent guard)
       if (dbSale.payment_status === 'paid') {
         return true;
       }
 
-      // 2. Update status to 'paid', record payment IDs
+      // 3. Ledger Idempotency Guard (Verified against inventory_stock_ledger columns)
+      const { count: existingLedgerCount } = await supabase
+        .from('inventory_stock_ledger')
+        .select('id', { count: 'exact', head: true })
+        .eq('ref_doc_no', dbSale.sale_no)
+        .eq('ref_type', 'DIRECT SALE')
+        .eq('transaction_type', 'STOCKOUT');
+
+      const ledgerAlreadyPosted = (existingLedgerCount ?? 0) > 0;
+      const dbItems = (dbSale.items && dbSale.items.length > 0) ? dbSale.items : (sale.items || []);
+
+      if (!ledgerAlreadyPosted && dbItems.length > 0) {
+        const ledgerEntries = [];
+        const localBalances = new Map<string, { quantity: number, rate: number }>();
+
+        for (const i of dbItems) {
+          const cleanBatch = ((i.batch_no || i.batchNo) || '').trim().toUpperCase();
+          const rawItemId = i.item_id || i.itemId;
+          const itemKey = `${dbSale.store_id}-${rawItemId}`;
+          let currentItemBalance = 0;
+          let currentAverageRate = 0;
+
+          if (localBalances.has(itemKey)) {
+            const val = localBalances.get(itemKey)!;
+            currentItemBalance = val.quantity;
+            currentAverageRate = val.rate;
+          } else {
+            const val = await getItemValuation(dbSale.store_id, rawItemId);
+            currentItemBalance = val.quantity;
+            currentAverageRate = val.rate;
+          }
+
+          // RESTORED: Multi-UOM check matches itemDef.salesUom
+          const itemDef = inventoryItems.find(inv => inv.id === rawItemId);
+          const isSalesUom = (i.unit || '').toUpperCase() === (itemDef?.salesUom || '').toUpperCase();
+          const salesCF = isSalesUom ? Number(itemDef?.salesConversionFactor || 1) : 1;
+
+          // Batch Balance Validation
+          const batchBalance = await getBatchStockBalance(dbSale.store_id, rawItemId, cleanBatch);
+          const qty = Number(i.quantity || 0) * salesCF;
+          if (batchBalance < qty) {
+            throw new Error(
+              `Insufficient stock in Batch ${cleanBatch} for ${itemDef?.itemName || rawItemId} ` +
+              `(Available: ${batchBalance}, Required: ${qty})`
+            );
+          }
+
+          const newBalance = currentItemBalance - qty;
+          localBalances.set(itemKey, { quantity: newBalance, rate: currentAverageRate });
+
+          ledgerEntries.push({
+            store_id: dbSale.store_id,
+            item_id: rawItemId,
+            transaction_type: 'STOCKOUT',
+            ref_type: 'DIRECT SALE',
+            ref_doc_no: dbSale.sale_no,
+            ref_doc_date: dbSale.sale_date,
+            stock_in_quantity: 0,
+            stock_out_quantity: qty,
+            closing_stock: newBalance,
+            closing_stock_rate: currentAverageRate,
+            closing_stock_value: newBalance * currentAverageRate,
+            batch_no: cleanBatch,
+            batch_date: i.batch_date || i.batchDate || null,
+            expiry_date: i.expiry_date || i.expiryDate || null,
+            currency: 'SAR'
+          });
+        }
+
+        const { error: ledgerError } = await supabase.from('inventory_stock_ledger').insert(ledgerEntries);
+        if (ledgerError) throw ledgerError;
+
+        // Auto-PO checks
+        for (const i of dbItems) {
+          const rawItemId = i.item_id || i.itemId;
+          const itemKey = `${dbSale.store_id}-${rawItemId}`;
+          const val = localBalances.get(itemKey);
+          if (val) {
+            await checkAndAutoRaisePO(dbSale.store_id, rawItemId, val.quantity);
+          }
+        }
+      }
+
+      // 4. JV Idempotency Guard (Verified against finance_journal_vouchers columns)
+      const { count: jvCount } = await supabase
+        .from('finance_journal_vouchers')
+        .select('id', { count: 'exact', head: true })
+        .eq('ref_doc_id', dbSale.id)
+        .eq('ref_type', 'PHARMACY_SALE');
+
+      const jvAlreadyPosted = (jvCount ?? 0) > 0;
+
+      if (!jvAlreadyPosted) {
+        const totalTaxAmount = dbItems.reduce((sum: number, item: any) => sum + Number(item.tax_amount || item.taxAmount || 0), 0);
+        const totalSaleAmount = Number(dbSale.total_amount || sale.totalAmount || 0);
+        const partyName = `${dbSale.first_name || ''} ${dbSale.last_name || ''}`.trim() || 'Cash Patient';
+
+        try {
+          await postAutoJournalVoucher('PHARMACY_SALE', dbSale.id, dbSale.sale_no, {
+            net: totalSaleAmount,
+            tax: totalTaxAmount,
+            cgst: Number((totalTaxAmount / 2).toFixed(2)),
+            sgst: Number((totalTaxAmount / 2).toFixed(2)),
+            igst: 0,
+            gross: Number((totalSaleAmount - totalTaxAmount).toFixed(2)),
+            partyName,
+            paymentMode: dbSale.payment_mode || sale.paymentMode || 'Card'
+          });
+          await supabase.from('pharmacy_direct_sales').update({ jv_status: 'posted' }).eq('id', dbSale.id);
+        } catch (jvErr) {
+          console.error("Auto JV failed (flagged in DB for finance):", jvErr);
+          await supabase.from('pharmacy_direct_sales').update({ jv_status: 'failed' }).eq('id', dbSale.id);
+        }
+      }
+
+      // 5. Generate Invoice and Receipt numbers if not yet assigned
+      let finalInvoiceNo = dbSale.invoice_no;
+      let finalReceiptNo = dbSale.receipt_no;
+
+      if (!finalInvoiceNo) {
+        const store = stores.find(s => s.id === dbSale.store_id);
+        const storeCode = store ? store.storeCode : 'DS';
+        const year = new Date().getFullYear().toString().slice(-2);
+
+        const { count } = await supabase
+          .from('pharmacy_direct_sales')
+          .select('id', { count: 'exact', head: true })
+          .not('invoice_no', 'is', null);
+
+        const seq = (count !== null ? count + 1 : 1).toString().padStart(6, '0');
+        finalInvoiceNo = `INV-D-${storeCode}-${year}${seq}`;
+        const rcpSeq = (count !== null ? count + 1 : 1).toString().padStart(8, '0');
+        finalReceiptNo = `RCP-${year}${rcpSeq}`;
+      }
+
+      // 6. Update Status to Paid — LAST STEP
       const { error: updateError } = await supabase
         .from('pharmacy_direct_sales')
         .update({
           payment_status: 'paid',
+          invoice_no: finalInvoiceNo,
+          receipt_no: finalReceiptNo,
           pg_payment_id: paymentId,
           pg_order_id: orderId,
           reference_no: paymentId
@@ -3185,101 +3332,25 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (updateError) throw updateError;
 
-      // 3. Update Stock Ledger (STOCKOUT)
-      const ledgerEntries = [];
-      const localBalances = new Map<string, { quantity: number, rate: number }>();
-
-      for (const i of sale.items) {
-        const cleanBatch = (i.batchNo || '').trim().toUpperCase();
-        const itemKey = `${sale.storeId}-${i.itemId}`;
-        let currentItemBalance = 0;
-        let currentAverageRate = 0;
-
-        if (localBalances.has(itemKey)) {
-          const val = localBalances.get(itemKey)!;
-          currentItemBalance = val.quantity;
-          currentAverageRate = val.rate;
-        } else {
-          const val = await getItemValuation(sale.storeId, i.itemId);
-          currentItemBalance = val.quantity;
-          currentAverageRate = val.rate;
-        }
-
-        // Resolve Sales Conversion Factor
-        const itemDef = inventoryItems.find(inv => inv.id === i.itemId);
-        const isSalesUom = i.unit?.toUpperCase() === itemDef?.salesUom?.toUpperCase();
-        const salesCF = isSalesUom ? Number(itemDef?.salesConversionFactor || 1) : 1;
-
-        // Batch-Specific Validation
-        const batchBalance = await getBatchStockBalance(sale.storeId, i.itemId, cleanBatch);
-        const qty = Number(i.quantity || 0) * salesCF;
-        if (batchBalance < qty) {
-            throw new Error(`Insufficient stock in Batch ${cleanBatch} for ${itemDef?.itemName || i.itemId} (Available in batch: ${batchBalance}, Required: ${qty})`);
-        }
-
-        const newBalance = currentItemBalance - qty;
-        localBalances.set(itemKey, { quantity: newBalance, rate: currentAverageRate });
-
-        const valuationRate = currentAverageRate;
-
-        ledgerEntries.push({
-          store_id: sale.storeId,
-          item_id: i.itemId,
-          transaction_type: 'STOCKOUT',
-          ref_type: 'DIRECT SALE',
-          ref_doc_no: sale.saleNo,
-          ref_doc_date: sale.saleDate,
-          stock_in_quantity: 0,
-          stock_out_quantity: qty,
-          closing_stock: newBalance,
-          closing_stock_rate: valuationRate,
-          closing_stock_value: newBalance * valuationRate,
-          batch_no: cleanBatch,
-          batch_date: i.batchDate || null,
-          expiry_date: i.expiryDate || null,
-          currency: 'SAR'
-        });
-      }
-
-      const { error: ledgerError } = await supabase.from('inventory_stock_ledger').insert(ledgerEntries);
-      if (ledgerError) throw ledgerError;
-
-      // Trigger automatic PO checks
-      for (const i of sale.items) {
-        const itemKey = `${sale.storeId}-${i.itemId}`;
-        const val = localBalances.get(itemKey);
-        if (val) {
-          await checkAndAutoRaisePO(sale.storeId, i.itemId, val.quantity);
-        }
-      }
-
-      // Calculate total tax amount from dbSale.items
-      const totalTaxAmount = (dbSale.items || []).reduce((sum: number, item: any) => sum + Number(item.tax_amount || 0), 0);
-
-      // Auto JV Posting
-      try {
-        const partyName = `${sale.firstName} ${sale.lastName || ''}`.trim();
-        await postAutoJournalVoucher('PHARMACY_SALE', dbSale.id, sale.saleNo, {
-          net: sale.totalAmount,
-          tax: totalTaxAmount,
-          cgst: Number((totalTaxAmount / 2).toFixed(2)),
-          sgst: Number((totalTaxAmount / 2).toFixed(2)),
-          igst: 0,
-          gross: Number((sale.totalAmount - totalTaxAmount).toFixed(2)),
-          partyName: partyName || 'Cash Patient',
-          paymentMode: sale.paymentMode
-        });
-      } catch (jvErr) {
-        console.error("Error posting automated direct sale journal voucher:", jvErr);
-      }
-
       showToast('success', 'Pharmacy Sale payment completed successfully.');
       setRefreshTrigger(prev => prev + 1);
       return true;
     } catch (error: any) {
       console.error('Error completing direct sale payment:', error);
       showToast('error', `Payment completion failed: ${error.message}`);
-      return false;
+      return false; // Preserves Razorpay compatibility
+    }
+  };
+
+  // Strict wrapper for PayU that throws on false so caller catches and triggers release-completion
+  const completeDirectSalePaymentStrict = async (
+    sale: DirectSale,
+    paymentId: string,
+    orderId: string
+  ): Promise<void> => {
+    const ok = await completeDirectSalePayment(sale, paymentId, orderId);
+    if (!ok) {
+      throw new Error('Stock deduction or finalization failed');
     }
   };
 
@@ -8226,7 +8297,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       chartOfAccounts, saveChartOfAccount, deleteChartOfAccount,
       journalVouchers, saveJournalVoucher, deleteJournalVoucher, postAutoJournalVoucher,
       gstr2bUploads, gstr2bInvoices, saveGstr2bUpload, markUploadReconciled,
-      currencies, selectedCurrency, setSelectedCurrency, saveCurrency, deleteCurrency, formatCurrency, completeDirectSalePayment,
+      currencies, selectedCurrency, setSelectedCurrency, saveCurrency, deleteCurrency, formatCurrency, completeDirectSalePayment, completeDirectSalePaymentStrict,
       toasts, showToast, addToast, removeToast,
       isLoading, isDbConnected, updateDbConnection, disconnectDb,
       patientRefunds, processPatientRefund,

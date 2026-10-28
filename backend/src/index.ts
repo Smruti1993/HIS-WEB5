@@ -11,6 +11,7 @@ import limsRoutes from './routes/lims';
 import astmRoutes from './routes/astm';
 import abdmRoutes from './routes/abdm';
 import pharmacyRoutes from './routes/pharmacy';
+import { pharmacyPaymentRouter, payuWebhookRouter, startPaymentReconciler } from './routes/pharmacyPayments';
 import { authenticateJWT } from './middleware/auth';
 
 const app = express();
@@ -37,6 +38,9 @@ app.get('/api/status', (req, res) => {
   res.json({ status: 'OK', message: 'HIS-WEB5 Backend Server is running.' });
 });
 
+// PayU Public Webhook Route (before auth guard)
+app.use('/api/pharmacy', payuWebhookRouter);
+
 // Secure API routes
 app.use('/api/adjudicate', authenticateJWT, adjudicateRoutes);
 app.use('/api/billing', authenticateJWT, billingRoutes);
@@ -44,6 +48,7 @@ app.use('/api/lims', authenticateJWT, limsRoutes);
 app.use('/api/astm', authenticateJWT, astmRoutes);
 app.use('/api/abdm', authenticateJWT, abdmRoutes);
 app.use('/api/pharmacy', authenticateJWT, pharmacyRoutes);
+app.use('/api/pharmacy', authenticateJWT, pharmacyPaymentRouter);
 
 // Protect everything passing through the database proxy lane
 app.use('/api/db/proxy', (req, res, next) => {
@@ -53,6 +58,9 @@ app.use('/api/db/proxy', (req, res, next) => {
     authenticateJWT(req, res, next);
   }
 }, proxyRoutes);
+
+// Background POS terminal payment reconciler
+startPaymentReconciler();
 
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);

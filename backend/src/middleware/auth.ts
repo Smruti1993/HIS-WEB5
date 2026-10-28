@@ -33,6 +33,11 @@ export const authenticateJWT = async (
   // 1. Look for a demo token first
   const demoPart = authParts.find(p => p.startsWith('Bearer demo-token:'));
   if (demoPart) {
+    if (process.env.NODE_ENV === 'production') {
+      console.log(`[Auth Middleware] Demo tokens are strictly rejected in production`);
+      res.status(403).json({ error: 'Demo tokens disabled in production' });
+      return;
+    }
     const token = demoPart.substring(7); // Remove 'Bearer '
     const tokenParts = token.split(':');
     req.user = {
