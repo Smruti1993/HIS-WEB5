@@ -203,6 +203,7 @@ export interface Patient {
   sponsorName?: string;
   policyNo?: string;
   cardNo?: string;
+  photoUrl?: string; // base64 data URL or remote URL
 }
 
 export interface DoctorAvailability {

@@ -65,6 +65,7 @@ import LimsPerformTest from './pages/LimsPerformTest';
 
 import { FileText, ShieldAlert } from 'lucide-react';
 import { Login } from './pages/Login';
+import { PatientSummaryPage } from './pages/PatientSummaryPage';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
     const { user } = useData();
@@ -131,6 +132,7 @@ const AppRoutes = () => {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/connection" element={<Connection />} />
+          <Route path="/patient-summary/:patientId" element={<PatientSummaryPage />} />
           
           <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
             <Route index element={<ScreenGuard screenCode="DASHBOARD"><Dashboard /></ScreenGuard>} />

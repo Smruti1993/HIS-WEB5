@@ -10,13 +10,19 @@ const STORAGE_KEY_URL = 'medicore_sb_url';
 const STORAGE_KEY_KEY = 'medicore_sb_key';
 
 export const getStoredCredentials = () => {
+  const localUrl = localStorage.getItem(STORAGE_KEY_URL);
+  const localKey = localStorage.getItem(STORAGE_KEY_KEY);
+  if (localUrl && localKey) {
+    return { url: localUrl, key: localKey };
+  }
+
   if (HARDCODED_URL && HARDCODED_KEY) {
     return { url: HARDCODED_URL, key: HARDCODED_KEY };
   }
 
   return {
-    url: localStorage.getItem(STORAGE_KEY_URL) || '',
-    key: localStorage.getItem(STORAGE_KEY_KEY) || ''
+    url: '',
+    key: ''
   };
 };
 

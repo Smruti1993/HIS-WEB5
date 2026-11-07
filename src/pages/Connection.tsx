@@ -26,16 +26,17 @@ export const Connection = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if(url && key && !isHardcoded) {
+    if(url && key) {
         updateDbConnection(url.trim(), key.trim());
+        setIsHardcoded(false);
     }
   };
 
   const handleDisconnect = () => {
-      if (isHardcoded) return;
       disconnectDb();
       setUrl('');
       setKey('');
+      setIsHardcoded(false);
       setTestStatus('idle');
   };
 
@@ -159,11 +160,20 @@ on conflict (username) do nothing;
                 </div>
             </div>
 
-            {/* Hardcoded Warning */}
+            {/* Hardcoded Information */}
             {isHardcoded && (
-                <div className="p-4 rounded-lg mb-6 bg-blue-50 text-blue-800 flex items-center gap-3 border border-blue-100">
-                    <Lock className="w-4 h-4" />
-                    <span className="text-sm font-medium">Using credentials hardcoded in <code>supabaseClient.ts</code>. Editing here is disabled.</span>
+                <div className="p-4 rounded-lg mb-6 bg-blue-50 text-blue-800 flex items-center justify-between gap-3 border border-blue-100">
+                    <div className="flex items-center gap-2 text-sm">
+                        <Lock className="w-4 h-4 shrink-0" />
+                        <span>Loaded default instance credentials. You can edit them below to connect your active Supabase database.</span>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setIsHardcoded(false)}
+                        className="text-xs bg-white text-blue-600 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-100 font-semibold shrink-0 cursor-pointer"
+                    >
+                        Edit Credentials
+                    </button>
                 </div>
             )}
 
@@ -175,7 +185,7 @@ on conflict (username) do nothing;
                             required 
                             disabled={isHardcoded}
                             type="url" 
-                            className={`form-input font-mono text-sm ${isHardcoded ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
+                            className={`form-input font-mono text-sm ${isHardcoded ? 'bg-slate-50 text-slate-600' : ''}`}
                             placeholder="https://your-project.supabase.co"
                             value={url}
                             onChange={e => setUrl(e.target.value)}
@@ -188,12 +198,12 @@ on conflict (username) do nothing;
                             required 
                             disabled={isHardcoded}
                             type="password" 
-                            className={`form-input font-mono text-sm ${isHardcoded ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
+                            className={`form-input font-mono text-sm ${isHardcoded ? 'bg-slate-50 text-slate-600' : ''}`}
                             placeholder="eyJh..."
                             value={key}
                             onChange={e => setKey(e.target.value)}
                         />
-                        {!isHardcoded && <p className="text-xs text-slate-400 mt-1">Found in Project Settings &gt; API</p>}
+                        <p className="text-xs text-slate-400 mt-1">Found in Project Settings &gt; API</p>
                     </div>
                 </div>
 
