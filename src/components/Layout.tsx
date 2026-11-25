@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { NAV_ITEMS, NavItem } from '../constants';
 import { useData } from '../context/DataContext';
 import { Bell, Search, UserCircle, X, LogOut, ChevronDown, ChevronRight } from 'lucide-react';
+import { ChatWidget } from './chat/ChatWidget';
 
 export const Layout = () => {
   const location = useLocation();
@@ -340,6 +341,9 @@ export const Layout = () => {
         <main className="flex-1 overflow-y-auto p-6 scroll-smooth bg-slate-50/50">
           <Outlet />
         </main>
+
+        {/* AI Chat Assistant (✨) Widget */}
+        <ChatWidget />
 
         {/* Toast Container */}
         <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-2 pointer-events-none">

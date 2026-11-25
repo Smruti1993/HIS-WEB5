@@ -12,6 +12,12 @@ backend/dist/
 # Environment files
 .env
 .env.*
+*.env
+**/.env
+**/.env.*
+backend/.env
+!.env.example
+!**/.env.example
 
 # Local/Scratch files
 scratch/

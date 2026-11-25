@@ -69,12 +69,16 @@ const statusColor = (label: string) => {
   return 'bg-slate-100 text-slate-600';
 };
 
+const resolveArr = (val: any) => (Array.isArray(val) ? val[0] : val);
+
 export default function LimsLabRegister() {
   const supabase = getSupabase();
 
   // ── Master data ──────────────────────────────────────────
-  const [branches, setBranches]         = useState<any[]>([]);
+  const [branches, setBranches]             = useState<any[]>([]);
   const [serviceCentres, setServiceCentres] = useState<any[]>([]);
+  const [departments, setDepartments]       = useState<any[]>([]);
+  const [labSections, setLabSections]       = useState<string[]>([]);
 
   // ── Filters ──────────────────────────────────────────────
   const today       = new Date().toISOString().split('T')[0];
@@ -99,6 +103,7 @@ export default function LimsLabRegister() {
   // ── Load master data on mount ────────────────────────────
   useEffect(() => {
     const fetchMasters = async () => {
+      // 1. Branches
       const { data: branchData } = await supabase
         .from('branches')
         .select('id, name')
@@ -108,12 +113,30 @@ export default function LimsLabRegister() {
         setBranch(branchData[0].id); // default to first branch
       }
 
+      // 2. Service Centres (with department_id)
       const { data: scData } = await supabase
         .from('service_centres')
-        .select('id, name')
+        .select('id, name, department_id')
         .eq('status', 'Active')
         .order('name');
       if (scData) setServiceCentres(scData);
+
+      // 3. Departments
+      const { data: deptData } = await supabase
+        .from('departments')
+        .select('id, name, code')
+        .order('name');
+      if (deptData) setDepartments(deptData);
+
+      // 4. Distinct Lab Sections
+      const { data: lsData } = await supabase
+        .from('lims_lab_orders')
+        .select('lab_section')
+        .not('lab_section', 'is', null);
+      if (lsData) {
+        const uniqueSections = Array.from(new Set(lsData.map((l: any) => l.lab_section).filter(Boolean))) as string[];
+        setLabSections(uniqueSections);
+      }
     };
     fetchMasters();
   }, []);
@@ -129,9 +152,14 @@ export default function LimsLabRegister() {
   const handleSearch = useCallback(async () => {
     setLoading(true);
     setSearched(true);
+
+    const selectedLabObj = serviceCentres.find(s => s.id === laboratory || s.name === laboratory);
+    const selectedDept = departments.find(d => d.id === laboratory || d.id === selectedLabObj?.department_id || d.name === laboratory);
+    const displayLabName = selectedLabObj?.name || selectedDept?.name || (laboratory ? laboratory : 'All');
+
     setActiveCriteria({
       branch:     branches.find(b => b.id === branch)?.name || branch,
-      laboratory: serviceCentres.find(s => s.id === laboratory)?.name || (laboratory ? laboratory : 'All'),
+      laboratory: displayLabName,
       status:     status || 'All',
       fromDate,
       toDate,
@@ -169,7 +197,8 @@ export default function LimsLabRegister() {
             ),
             appointment:appointment_id (
               id,
-              patient_id
+              patient_id,
+              department_id
             )
           )
         `)
@@ -178,19 +207,11 @@ export default function LimsLabRegister() {
         .lte('ordered_at', new Date(`${toDate}T23:59:59`).toISOString())
         .order('ordered_at', { ascending: false });
 
-      // Status filter
+      // Status filter in DB
       if (dbStatuses.length === 1) {
         query = query.eq('status', dbStatuses[0]);
       } else if (dbStatuses.length > 1) {
         query = query.in('status', dbStatuses);
-      }
-
-      // Lab section / laboratory filter (service_center)
-      if (laboratory) {
-        const labName = serviceCentres.find(s => s.id === laboratory)?.name || '';
-        if (labName) {
-          query = query.ilike('lab_section', `%${labName}%`);
-        }
       }
 
       const { data: ordersData, error } = await query;
@@ -202,16 +223,45 @@ export default function LimsLabRegister() {
         return;
       }
 
-      // ── Client-side secondary date filter (Issue 2 fix) ──────────────
-      // Restrict to rows whose *displayed* received/collected date also falls
-      // within the selected window, so the Received On column is consistent.
+      // ── Client-side date & laboratory / section matching ──────────────
       const fromMs = new Date(`${fromDate}T00:00:00`).getTime();
       const toMs   = new Date(`${toDate}T23:59:59`).getTime();
+
+      const targetIds = [
+        laboratory,
+        selectedLabObj?.id,
+        selectedLabObj?.department_id,
+        selectedDept?.id
+      ].filter(Boolean);
+      const targetName = selectedLabObj?.name || selectedDept?.name || laboratory;
+
       const filteredOrders = (ordersData as any[]).filter(o => {
+        // 1. Date window check on display date (received_at / collected_at / ordered_at)
         const ts = o.received_at || o.collected_at || o.ordered_at;
-        if (!ts) return true; // include orders with no timestamp (edge case)
-        const t = new Date(ts).getTime();
-        return t >= fromMs && t <= toMs;
+        if (ts) {
+          const t = new Date(ts).getTime();
+          if (t < fromMs || t > toMs) return false;
+        }
+
+        // 2. Laboratory / Lab section filter
+        if (laboratory) {
+          const svcOrder = resolveArr(o.service_order);
+          const appt = svcOrder ? resolveArr(svcOrder.appointment) : null;
+          const sc = svcOrder?.service_center;
+          const apptDeptId = appt?.department_id;
+          const ls = o.lab_section;
+
+          const matchesId = (sc && targetIds.includes(sc)) || (apptDeptId && targetIds.includes(apptDeptId));
+          const matchesName = Boolean(targetName && (
+            (sc && sc.toLowerCase() === targetName.toLowerCase()) ||
+            (ls && ls.toLowerCase().includes(targetName.toLowerCase())) ||
+            (selectedDept && selectedDept.name?.toLowerCase() === targetName.toLowerCase() && sc === selectedDept.id)
+          ));
+
+          if (!matchesId && !matchesName) return false;
+        }
+
+        return true;
       });
 
       if (filteredOrders.length === 0) {
@@ -221,7 +271,6 @@ export default function LimsLabRegister() {
       }
 
       // Collect unique patient IDs to batch-fetch patients
-      const resolveArr = (val: any) => (Array.isArray(val) ? val[0] : val);
       const patientIds: string[] = Array.from(new Set(
         filteredOrders.map((o: any) => resolveArr(o.service_order)?.appointment?.patient_id).filter(Boolean)
       ));
@@ -327,7 +376,7 @@ export default function LimsLabRegister() {
     } finally {
       setLoading(false);
     }
-  }, [branch, laboratory, status, fromDate, toDate, branches, serviceCentres]);
+  }, [branch, laboratory, status, fromDate, toDate, branches, serviceCentres, departments]);
 
   // ── Reset ────────────────────────────────────────────────
   const handleReset = () => {
@@ -439,6 +488,11 @@ export default function LimsLabRegister() {
                 {serviceCentres.map(s => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
+                {labSections
+                  .filter(sec => !serviceCentres.some(s => s.name?.toLowerCase() === sec.toLowerCase()))
+                  .map(sec => (
+                    <option key={sec} value={sec}>{sec}</option>
+                  ))}
               </select>
               <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
             </div>

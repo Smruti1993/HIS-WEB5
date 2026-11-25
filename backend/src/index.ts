@@ -13,6 +13,7 @@ import abdmRoutes from './routes/abdm';
 import pharmacyRoutes from './routes/pharmacy';
 import { pharmacyPaymentRouter, payuWebhookRouter, startPaymentReconciler } from './routes/pharmacyPayments';
 import { authenticateJWT } from './middleware/auth';
+import chatRoutes from './routes/chat';
 
 const app = express();
 const PORT = process.env.PORT || 5005;
@@ -58,6 +59,9 @@ app.use('/api/db/proxy', (req, res, next) => {
     authenticateJWT(req, res, next);
   }
 }, proxyRoutes);
+
+// AI Chat Assistant routes (resolveChatUser middleware applied inside chatRoutes)
+app.use('/api/chat', chatRoutes);
 
 // Background POS terminal payment reconciler
 startPaymentReconciler();

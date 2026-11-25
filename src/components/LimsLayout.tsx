@@ -16,6 +16,7 @@ import {
   ArrowLeft,
   Beaker
 } from 'lucide-react';
+import { ChatWidget } from './chat/ChatWidget';
 
 export default function LimsLayout() {
   const location = useLocation();
@@ -399,6 +400,9 @@ export default function LimsLayout() {
         <main className="flex-1 overflow-y-auto p-8 bg-[#F4F6F9]">
           <Outlet />
         </main>
+
+        {/* AI Chat Assistant (✨) Widget */}
+        <ChatWidget />
 
       </div>
     </div>
