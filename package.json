@@ -6,11 +6,11 @@
   "scripts": {
     "predev": "kill-port 5005 5173",
     "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
-    "dev:frontend": "vite",
+    "dev:frontend": "node ./node_modules/vite/bin/vite.js",
     "dev:backend": "npm run --prefix backend dev",
-    "build": "tsc -b && vite build",
+    "build": "node ./node_modules/typescript/bin/tsc -b && node ./node_modules/vite/bin/vite.js build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "node ./node_modules/vite/bin/vite.js preview"
   },
   "dependencies": {
     "@google/genai": "^1.38.0",
